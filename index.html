@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>現場主管版｜動態量能檢核</title>
+<style>:root{
+  --g900:#0f3d2e; --g800:#14532d; --g700:#166534; --g600:#15803d; --g500:#22a05a;
+  --g400:#4ade80; --g200:#bbf7d0; --g100:#dcfce7; --g50:#f0fdf4;
+  --ink:#1c2b24; --muted:#5b6b63; --line:#dfe9e3; --bg:#ffffff; --soft:#f7faf8;
+  --yel:#b45309; --yel-bg:#fef6e4; --red:#b91c1c; --red-bg:#fdecec; --pur:#6d28d9; --pur-bg:#f3edfd;
+  --radius:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;font-size:14.5px;line-height:1.55}
+a{color:var(--g700)}
+/* top bar */
+.topbar{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid var(--line)}
+.topbar .inner{max-width:1280px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--g800)}
+.brand .dot{width:28px;height:28px;border-radius:8px;background:var(--g600);color:#fff;display:grid;place-items:center;font-size:14px}
+.brand small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.flow{display:flex;align-items:center;gap:4px;margin-left:auto;flex-wrap:wrap}
+.flow a{text-decoration:none;padding:6px 12px;border-radius:999px;font-size:13px;color:var(--muted);border:1px solid var(--line);background:#fff;white-space:nowrap}
+.flow a.on{background:var(--g700);color:#fff;border-color:var(--g700)}
+.flow a:hover:not(.on){border-color:var(--g500);color:var(--g700)}
+.flow .arr{color:#a3b8ad;font-size:12px}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--g500);color:var(--g700)}
+.btn.pri{background:var(--g700);border-color:var(--g700);color:#fff}
+.btn.pri:hover{background:var(--g800)}
+.btn.sm{padding:3px 9px;font-size:12px}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.danger:hover{border-color:var(--red);color:var(--red)}
+main{max-width:1280px;margin:0 auto;padding:20px}
+.page-title{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:4px 0 16px}
+.page-title h1{margin:0;font-size:22px;color:var(--g900);letter-spacing:.5px}
+.page-title p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.saved{font-size:12px;color:var(--muted)}
+.saved b{color:var(--g700);font-weight:600}
+/* cards & sections */
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px}
+.card.soft{background:var(--soft)}
+.sec-h{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.sec-h .tag{font-size:12px;font-weight:700;color:#fff;background:var(--g600);border-radius:6px;padding:2px 8px}
+.sec-h h2{margin:0;font-size:16px;color:var(--g900)}
+.sec-h .hint{margin-left:auto;font-size:12px;color:var(--muted)}
+.note{font-size:12.5px;color:var(--muted);margin:8px 0 0}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.g6{grid-template-columns:repeat(6,minmax(0,1fr))}
+@media(max-width:1000px){.g4,.g6{grid-template-columns:repeat(2,minmax(0,1fr))}.g3{grid-template-columns:1fr}}
+@media(max-width:640px){.g2{grid-template-columns:1fr}}
+/* forms */
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+input[type=text],input[type=number],input[type=date],input[type=datetime-local],select,textarea{
+  font:inherit;font-size:14px;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:#fff;width:100%}
+textarea{resize:vertical;min-height:38px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--g200);border-color:var(--g500)}
+input.auto{background:var(--g50);border-style:dashed;color:var(--g800)}
+.unit{position:relative}
+.unit span{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--muted);pointer-events:none}
+.unit input{padding-right:30px}
+/* segmented result */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:nowrap}
+.seg button{font:inherit;font-size:12.5px;border:0;background:#fff;padding:5px 9px;cursor:pointer;color:var(--muted);border-right:1px solid var(--line);white-space:nowrap}
+.seg button:last-child{border-right:0}
+.seg button.on[data-v=full]{background:var(--g600);color:#fff}
+.seg button.on[data-v=part]{background:#f59e0b;color:#fff}
+.seg button.on[data-v=none]{background:var(--red);color:#fff}
+.seg button.on[data-v=na]{background:#94a3b8;color:#fff}
+.seg button.on{background:var(--g600);color:#fff}
+/* KPI tiles */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;position:relative}
+.kpi .k{font-size:12px;color:var(--muted)}
+.kpi .v{font-size:24px;font-weight:700;color:var(--g900);line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .v small{font-size:13px;font-weight:500;color:var(--muted);margin-left:2px}
+.kpi .s{font-size:11.5px;color:var(--muted);margin-top:2px}
+.kpi.warn{border-color:#f5c97a;background:var(--yel-bg)} .kpi.warn .v{color:var(--yel)}
+.kpi.bad{border-color:#f2b1b1;background:var(--red-bg)} .kpi.bad .v{color:var(--red)}
+.kpi.good .v{color:var(--g700)}
+.bar{height:6px;border-radius:99px;background:var(--g100);overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:var(--g500);border-radius:99px}
+.bar.warn i{background:#f59e0b}.bar.bad i{background:var(--red)}
+/* alert banner */
+.alert{display:flex;gap:14px;align-items:center;border-radius:12px;padding:14px 16px;border:1px solid}
+.alert .lamp{width:46px;height:46px;border-radius:50%;flex:none;display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px}
+.alert h3{margin:0;font-size:16px}
+.alert p{margin:2px 0 0;font-size:13px}
+.lv-green{background:var(--g50);border-color:var(--g200)} .lv-green .lamp{background:var(--g600)} .lv-green h3{color:var(--g800)}
+.lv-yellow{background:var(--yel-bg);border-color:#f5d9a6} .lv-yellow .lamp{background:#d97706} .lv-yellow h3{color:var(--yel)}
+.lv-red{background:var(--red-bg);border-color:#f2b1b1} .lv-red .lamp{background:var(--red)} .lv-red h3{color:var(--red)}
+.lv-purple{background:var(--pur-bg);border-color:#d8c7f7} .lv-purple .lamp{background:var(--pur)} .lv-purple h3{color:var(--pur)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:#fff;white-space:nowrap}
+.chip.g{background:var(--g100);border-color:var(--g200);color:var(--g800)}
+.chip.y{background:var(--yel-bg);border-color:#f5d9a6;color:var(--yel)}
+.chip.r{background:var(--red-bg);border-color:#f2b1b1;color:var(--red)}
+.chip.p{background:var(--pur-bg);border-color:#d8c7f7;color:var(--pur)}
+.chip.n{background:#f1f5f9;color:#64748b}
+/* tables */
+table.t{width:100%;border-collapse:separate;border-spacing:0;font-size:13.5px}
+table.t th{background:var(--g50);color:var(--g900);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12.5px;white-space:nowrap}
+table.t td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t tr:last-child td{border-bottom:0}
+table.t td.num{text-align:right;font-variant-numeric:tabular-nums}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+/* checklist items */
+.item{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:#fff}
+.item .hd{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.item .code{font-weight:700;color:#fff;background:var(--g700);border-radius:6px;padding:1px 8px;font-size:12.5px;flex:none}
+.item .ttl{font-weight:600;color:var(--g900)}
+.item .q{color:var(--ink);font-size:13.5px;margin-top:2px}
+.item .ev{font-size:12.5px;color:var(--muted);margin-top:4px}
+.item .ev b{color:var(--g700);font-weight:600}
+.item .right{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.item .body{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+@media(max-width:800px){.item .body{grid-template-columns:1fr}.item .right{margin-left:0;align-items:flex-start}}
+.item.st-full{border-left:4px solid var(--g500)}
+.item.st-part{border-left:4px solid #f59e0b}
+.item.st-none{border-left:4px solid var(--red)}
+.item.st-na{border-left:4px solid #94a3b8}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin-top:8px}
+@media(max-width:800px){.checks{grid-template-columns:1fr}}
+.checks label{display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;padding:2px 0}
+.checks input{margin-top:3px;accent-color:var(--g600)}
+.cbx{display:flex;flex-wrap:wrap;gap:6px 14px}
+.cbx label{display:flex;gap:6px;align-items:center;font-size:13.5px;cursor:pointer}
+.cbx input{accent-color:var(--g600)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+.side{position:sticky;top:74px}
+@media(max-width:1100px){.layout{grid-template-columns:minmax(0,1fr)}.side{position:static}}
+.ring{width:84px;height:84px;flex:none}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.pipe{display:flex;gap:4px}
+.pipe span{flex:1;text-align:center;font-size:11.5px;padding:4px 2px;border-radius:6px;background:var(--soft);color:var(--muted);border:1px solid var(--line)}
+.pipe span.done{background:var(--g100);color:var(--g800);border-color:var(--g200)}
+.pipe span.cur{background:var(--g600);color:#fff;border-color:var(--g600)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--g900);color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:.25s;pointer-events:none;z-index:99}
+.toast.show{opacity:1}
+.empty{padding:18px;text-align:center;color:var(--muted);font-size:13px;border:1px dashed var(--line);border-radius:10px;background:var(--soft)}
+.zone-col h4{margin:0 0 8px;font-size:14px;color:var(--g800);display:flex;align-items:center;gap:8px}
+.mini{font-size:12px;color:var(--muted)}
+hr.s{border:0;border-top:1px solid var(--line);margin:14px 0}
+@media print{
+  .topbar,.tools,.btn,.side .noprint{display:none!important}
+  main{padding:0;max-width:none}
+  .card{break-inside:avoid;border-color:#ccc}
+  .layout{grid-template-columns:1fr}
+  .side{position:static}
+}
+.mask{position:fixed;inset:0;background:rgba(15,61,46,.28);display:grid;place-items:center;z-index:200;padding:16px}
+.dlg{background:#fff;border-radius:12px;padding:20px;max-width:620px;width:100%;box-shadow:0 20px 50px rgba(15,61,46,.25);border:1px solid var(--line)}
+.topg{grid-template-columns:minmax(0,1.1fr) minmax(0,2fr);gap:16px;align-items:stretch}
+@media(max-width:900px){.topg{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:600px){main{padding:14px}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}.flow{margin-left:0}}
+.layout>*,.grid>*{min-width:0}.sec-h{flex-wrap:wrap}
+.fig{position:relative;height:340px}.fig>svg{position:absolute;inset:0;width:100%;height:100%;touch-action:pan-y}
+.tip{position:absolute;pointer-events:none;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;box-shadow:0 6px 18px rgba(15,61,46,.12);opacity:0;transition:opacity .12s;min-width:190px}
+@media(max-width:600px){.fig{height:280px}}
+</style>
+<script>/* ===== 115年隔離醫院緊急應變檢核：三層共用資料層 ===== */
+const STORE_KEY = 'icp115_checklist_v1';
+const RES = {full:'完全符合', part:'部分符合', none:'無規劃', na:'不適用'};
+const RES_SHORT = {full:'全', part:'部', none:'無', na:'不適用'};
+const ZONE_STATUS = ['未啟動','整備中','待驗收','已啟用'];
+const NEED_FLOW = ['提出','核准','送達/到班','驗收','可用'];
+
+/* 現場主管 B1–B12（含與院長 T 項、靜態條文之對應） */
+const B_ITEMS = [
+ {id:'B1',t:'急診接收與交接',q:'病人從急診到第一區，是否有明確檢傷、安置、轉送及交接流程？候床期間誰負責？',ev:'檢傷流程、轉送動線、接收窗口、交接表、候床照護責任',T:['T2'],S:['5-7-1','5-7-4','5-9-5']},
+ {id:'B2',t:'三區實際量能',q:'第一、第二、第三區各能收多少人？是否區分規劃床數與已驗收可用床數？',ev:'各區床數、病人類型、已收治人數、當班人力及設備限制',T:['T2'],S:['四','5-3-5','5-7-3']},
+ {id:'B3',t:'第二區擴充整備',q:'第一區接近量能限制前，第二區能否及時完成原病人安置、空間清空、整備及驗收？',ev:'整備清單、啟動條件、責任人、工期、開區驗收紀錄',T:['T3','T6'],S:['5-3-4','5-3-5','5-7-3','5-7-4']},
+ {id:'B4',t:'第三區預備支援',q:'第二區啟用前，第三區是否已提前安排人員訓練、設備、物資及空間整備？',ev:'準備時程、訓練進度、資源來源、預計驗收及啟用時間',T:['T3','T4'],S:['5-6-2','5-6-3','5-7-3']},
+ {id:'B5',t:'各班人力與長期支持',q:'各區醫師、護理、呼吸治療、放射等人力是否足夠？缺勤或長期應變時如何替補、輪休及提供支持？',ev:'分區分班人力表、最低需求、代理名單、休息與員工支持安排',T:['T4'],S:['5-4-1','5-4-2','5-4-4','5-11-3']},
+ {id:'B6',t:'跨科及外援能力',q:'跨科或外部支援人員是否完成必要訓練？是否清楚可執行的任務與督導責任？',ev:'資格、PPE訓練、設備操作能力、工作範圍、督導人員',T:['T4'],S:['5-4-3','5-4-4','5-6-2']},
+ {id:'B7',t:'設備與供氧能力',q:'呼吸器、HFNC、抽痰設備及氧氣供應是否足以支援預定收治量？設備是否實際可用？',ev:'設備清冊、功能檢測、配件、供氧容量、故障與替代方案',T:['T5'],S:['5-5-1','5-5-2','5-7-4']},
+ {id:'B8',t:'物資與藥品供應',q:'PPE、藥品與耗材能維持多久？不足時能否在用盡前完成補給？',ev:'庫存、消耗速度、可用天數、補貨交期、替代供應來源',T:['T5'],S:['5-5-1','5-5-2','5-2-5']},
+ {id:'B9',t:'分區感控與聯合驗收',q:'各區隔離、通風、清消、電梯、樓梯、保全及廢棄物動線是否符合要求？開區前是否完成聯合驗收？',ev:'感控、護理、醫工、工務、保全及清潔等單位確認紀錄',T:['T3','T8'],S:['5-2-4','5-9-5','5-9-6','5-9-8','5-10-3']},
+ {id:'B10',t:'醫療服務與後勤銜接',q:'檢驗、放射、藥事、重症、營養及後勤服務是否能支援各區？一般病房服務如何維持？',ev:'支援流程、窗口、服務時段、原病人安置及必要醫療保障',T:['T6'],S:['5-7-2','5-7-4','5-7-5']},
+ {id:'B11',t:'量能不足與轉院',q:'院內三區仍不足，或病人需要本院無法提供的照護時，如何啟動轉院？',ev:'轉院條件、醫療網聯繫、接收確認、運送、交接及等待期間照護',T:['T7'],S:['5-7-2','5-7-3','5-7-4','5-8-2']},
+ {id:'B12',t:'資源到位與異常回報',q:'主管提出的人力、設備、物資需求，是否追蹤到真正可用？通訊中斷或資源延誤時如何升級處理？',ev:'需求→核准→送達／到班→驗收→可用紀錄；通訊備援及異常升級程序',T:['T8','T1'],S:['5-8-1','5-8-3','5-1','5-12']},
+];
+
+/* 院長 T1–T8 */
+const T_ITEMS = [
+ {id:'T1',t:'指揮、授權與溝通',q:'誰能決定、誰負責執行？應變啟動、開區、調人、採購、降載及轉院是否明確授權？夜間代理、對內外溝通與安全管制是否有人負責？',ev:'決策與代理名單、授權範圍、通知方式、發言及家屬／員工溝通窗口、安全管制責任',S:['5-1','5-3-2','5-3-3','5-11-2','5-10-1']},
+ {id:'T2',t:'實際收治能力',q:'三區各能照顧哪些病人、實際能收多少？是否分清規劃床數、已驗收可用床數及目前可再收人數？',ev:'按照護類型與班別列出的量能、人力設備限制、確認人及資料更新時間',S:['四','5-7-3']},
+ {id:'T3',t:'提前整備與分區啟用',q:'第二區、第三區何時必須開始準備？預估需求超過現有能力前，能否完成整備與驗收？開始準備及開始收治的條件是否分開？',ev:'預估缺口時間、整備與驗收工期、安全緩衝、最晚決策時間、開區條件',S:['5-3-1','5-3-4','5-3-5']},
+ {id:'T4',t:'人力、訓練與員工保障',q:'調得到人，也能持續提供照護嗎？跨科與外援人員的能力、督導、缺勤備援，以及員工健康與休息安排是否充分？',ev:'各區各班配置、能力確認、訓練與督導、替補方案、健康監測、病假及心理／家庭支持',S:['5-4-4','5-11-3','5-6-2']},
+ {id:'T5',t:'設備、物資與經費',q:'缺什麼、何時補得上、由誰核准？設備、供氧、PPE與藥品的補強是否有經費、來源及可確認的交期？',ev:'需求與缺口、經費來源、採購授權、補強交期、替代來源及驗收責任人',S:['5-5-1','5-5-2']},
+ {id:'T6',t:'病區轉換與必要服務維持',q:'開區後，原病人與一般醫療如何安排？病房停收、病人安置、服務降載及特殊照護需求是否有配套？',ev:'原病人安置、服務調整順序、必要服務維持方案、透析等特殊照護安排及受影響人力',S:['5-7-2','5-7-4']},
+ {id:'T7',t:'院內擴充與區域轉送',q:'依序啟用三區後仍不足，如何安排轉院？接收醫院、運送及等待期間照護是否已有安排？',ev:'三區總可用量能與缺口、醫療網窗口、接收確認、運送與交接程序',S:['5-7-3','5-8-2']},
+ {id:'T8',t:'執行驗收、修正與復原',q:'核准事項是否真正完成？資源能否追到現場驗收？延誤如何處理？縮區及恢復服務由誰確認？',ev:'決策追蹤、承諾與實際到位、驗收結果、剩餘缺口、升級處理及復原簽核',S:['5-12','5-8-3']},
+];
+T_ITEMS.forEach(t=>{t.B=B_ITEMS.filter(b=>b.T.includes(t.id)).map(b=>b.id)});
+
+/* ===== Store ===== */
+const Store = {
+  blank(){return {field:Store.blankField(),director:{meta:{},T:{},decisions:{},approvals:[]},static:{clauses:{},meta:{}}}},
+  blankField(){
+    return {meta:{},zones:['第一區','第二區','第三區'].map((n,i)=>({name:n,care:['隔離照護','擴充準備','預備支援'][i],status:i===0?'已啟用':'未啟動',planned:'',accepted:'',admitted:'',staff:'',minStaff:'',equipGap:'',readyTime:'',todo:''})),
+      ops:{edWait:'',dailyNew:'',ventTotal:'',ventUsed:'',icuTotal:'',icuUsed:'',ppeDays:'',ppeLead:'',o2Load:'',prepDays:'',bufferDays:'',exhausted:false},
+      items:{},needs:[]};
+  },
+  load(){
+    try{const s=JSON.parse(localStorage.getItem(STORE_KEY)||'null'); if(s&&s.field) return Object.assign(Store.blank(),s);}catch(e){}
+    return Store.blank();
+  },
+  write(db,parts){db.savedAt=new Date().toISOString();
+    parts=parts||(window.PAGE_PART?[PAGE_PART]:[]);
+    const now=Date.now(); parts.forEach(p=>{if(db[p])db[p]._ts=now});
+    Store.raw(db); Cloud.markDirty(parts); Store._stamp(db)},
+  raw(db){try{localStorage.setItem(STORE_KEY,JSON.stringify(db));}catch(e){}},
+  _t:null,
+  saveSoon(db,parts){clearTimeout(Store._t);Store._t=setTimeout(()=>{Store._t=null;Store.write(db,parts)},250)},
+  _stamp(db){const el=document.getElementById('savedAt'); if(el) el.innerHTML=db.savedAt?'已自動儲存 <b>'+fmtDT(db.savedAt)+'</b>':'尚未儲存'},
+};
+
+/* ===== KPI engine ===== */
+const n = v => (v===''||v==null||isNaN(+v))?null:+v;
+function computeKPI(f){
+  const zones = f.zones.map(z=>{
+    const acc=n(z.accepted), adm=n(z.admitted), st=n(z.staff), mn=n(z.minStaff);
+    return Object.assign({},z,{acc,adm,rem:(acc!=null&&adm!=null)?Math.max(acc-adm,0):null,
+      occ:(acc&&adm!=null)?adm/acc:null, staffRatio:(st!=null&&mn)?st/mn:null});
+  });
+  let act = zones.filter(z=>z.status==='已啟用');
+  const accAll = act.reduce((s,z)=>s+(z.acc||0),0);
+  const admAll = zones.reduce((s,z)=>s+(z.adm||0),0);
+  const admAct = act.reduce((s,z)=>s+(z.adm||0),0);
+  const remAll = act.reduce((s,z)=>s+(z.rem||0),0);
+  const plannedAll = zones.reduce((s,z)=>s+(n(z.planned)||0),0);
+  const accTotal = zones.reduce((s,z)=>s+(z.acc||0),0);
+  const occAll = accAll? admAct/accAll : null;
+  const o=f.ops;
+  const ventOcc = n(o.ventTotal)? (n(o.ventUsed)||0)/n(o.ventTotal):null;
+  const icuOcc  = n(o.icuTotal)? (n(o.icuUsed)||0)/n(o.icuTotal):null;
+  const edWait = n(o.edWait);
+  // 警示分級
+  const reasons=[]; let level='green';
+  if(occAll!=null&&occAll>=.8){level='yellow';reasons.push('專責病床佔床率 '+pct(occAll)+' ≥ 80%')}
+  if(edWait!=null&&edWait>=6){level='yellow';reasons.push('急診等床 '+edWait+' 小時 ≥ 6 小時')}
+  if(ventOcc!=null&&ventOcc>=.85){level='red';reasons.push('呼吸器佔用率 '+pct(ventOcc)+' ≥ 85%')}
+  if(icuOcc!=null&&icuOcc>=.85){level='red';reasons.push('ICU 佔用率 '+pct(icuOcc)+' ≥ 85%')}
+  if(o.exhausted){level='purple';reasons.push('設備用罄且無可用調借或外部支援管道')}
+  if(!reasons.length) reasons.push('佔床率 < 80% 且急診等床 < 6 小時');
+  // 病人湧入分級（CHIME 示意）
+  const surge = admAll>=45?4:admAll>=15?3:admAll>=6?2:1;
+  // 時間推估
+  const daily=n(o.dailyNew);
+  const daysToFull = (daily&&daily>0)? remAll/daily : null;
+  const prep=n(o.prepDays), buf=n(o.bufferDays);
+  const latestDays = (daysToFull!=null&&prep!=null)? daysToFull-prep-(buf||0) : null;
+  const base = f.meta.dataTime? new Date(f.meta.dataTime) : new Date();
+  const addD = d => d==null?null:new Date(base.getTime()+d*864e5);
+  // 最先不足資源
+  const cand=[];
+  if(daysToFull!=null) cand.push({res:'可收治床位（已啟用區）',days:daysToFull});
+  if(n(o.ppeDays)!=null) cand.push({res:'PPE／耗材',days:n(o.ppeDays),lead:n(o.ppeLead)});
+  const shortStaff = zones.filter(z=>z.status==='已啟用'&&z.staffRatio!=null&&z.staffRatio<1);
+  if(shortStaff.length) cand.push({res:'當班合格人力（'+shortStaff.map(z=>z.name).join('、')+'）',days:0});
+  if(ventOcc!=null&&ventOcc>=.85) cand.push({res:'呼吸器',days:0});
+  if(icuOcc!=null&&icuOcc>=.85) cand.push({res:'ICU 床位',days:0});
+  if(n(o.o2Load)!=null&&n(o.o2Load)>=90) cand.push({res:'供氧系統負載',days:0});
+  cand.sort((a,b)=>a.days-b.days);
+  const first = cand[0]||null;
+  const ppeMargin = (n(o.ppeDays)!=null&&n(o.ppeLead)!=null)? n(o.ppeDays)-n(o.ppeLead):null;
+  return {zones,accAll,admAll,admAct,remAll,plannedAll,accTotal,occAll,ventOcc,icuOcc,edWait,level,reasons,surge,
+    daysToFull,latestDays,gapAt:addD(daysToFull),latestAt:addD(latestDays),first,cand,ppeMargin,
+    o2:n(o.o2Load),staffShort:shortStaff, comp:compliance(f.items,B_ITEMS), needs:needStats(f.needs)};
+}
+function compliance(items,list){
+  const c={full:0,part:0,none:0,na:0,unset:0};
+  list.forEach(it=>{const r=(items[it.id]||{}).r; c[r||'unset']++});
+  const denom=c.full+c.part+c.none;
+  c.score = denom? (c.full+c.part*.5)/denom : null;
+  c.done = list.length-c.unset; c.total=list.length;
+  return c;
+}
+function needStats(needs){
+  const s={total:needs.length,by:{},overdue:[],open:0};
+  NEED_FLOW.forEach(k=>s.by[k]=0);
+  const today=new Date(); today.setHours(0,0,0,0);
+  needs.forEach(x=>{s.by[x.status||'提出']=(s.by[x.status||'提出']||0)+1;
+    if(x.status!=='可用'){s.open++; if(x.due&&new Date(x.due)<today) s.overdue.push(x)}});
+  return s;
+}
+const LEVEL = {
+  green:{name:'綠燈｜常態運作',cls:'lv-green',lamp:'綠',owner:'感控／急診／病床管理',act:'持續監測佔床、候床、物資耗用與設備可用量'},
+  yellow:{name:'黃燈｜進入應變',cls:'lv-yellow',lamp:'黃',owner:'院長室／護理部／醫工',act:'N+1 樓層清空；N+2 樓層 PPE 演練；盤點高流量氧氣療設備與呼吸器'},
+  red:{name:'紅燈｜危機階段',cls:'lv-red',lamp:'紅',owner:'院長室／手術室／麻醉科／加護單位',act:'核定非緊急手術降載；跨科人力支援；調度手術室與恢復室資源'},
+  purple:{name:'紫燈｜資源將盡',cls:'lv-purple',lamp:'紫',owner:'院長室／急診／轉診窗口／區指揮官',act:'危急病人先急救穩定；依法準備病歷摘要；通報並啟動轉院；依急救義務、分流及核定政策評估收治'},
+};
+const SURGE = {
+  1:{name:'第1級 監測應變',d:'零星確診（1–2名）：負壓隔離病房收治；隔離照護專責病房盤點；感染科常規防護複訓'},
+  2:{name:'第2級 啟動擴充',d:'門檻突破（6–10名）：啟用隔離照護專責（佔床>80%）；擴充準備區病房騰空、非緊急常規檢查降載；預備支援區醫護開始練習穿脫 PPE'},
+  3:{name:'第3級 高峰應變',d:'重症激增（15–40名）：啟用擴充準備區收治；預備支援區病房騰空、全面停止非緊急手術；全體密集穿脫訓練'},
+  4:{name:'第4級 極限應變',d:'極限防線（45名以上）：預備支援區動用／拒收；設備斷鏈時通報醫療網區指揮官轉院；外部支援人力進駐（Buddy System）'},
+};
+
+/* ===== helpers ===== */
+const $=(s,r=document)=>r.querySelector(s); const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pct=v=>v==null?'—':Math.round(v*100)+'%';
+const fx=(v,d=1)=>v==null?'—':(Math.round(v*Math.pow(10,d))/Math.pow(10,d)).toString();
+function fmtDT(d){if(!d)return '—';d=new Date(d);if(isNaN(d))return '—';const p=x=>String(x).padStart(2,'0');return `${d.getMonth()+1}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`}
+function fmtDays(d){if(d==null)return '—';if(d<0)return '已逾 '+fx(-d)+' 天';if(d<1)return fx(d*24,0)+' 小時';return fx(d)+' 天'}
+function toast(msg){let t=$('.toast');if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
+function seg(name,val,opts=['full','part','none','na'],labels=RES_SHORT){
+  return `<div class="seg" data-seg="${name}">${opts.map(o=>`<button type="button" data-v="${o}" class="${val===o?'on':''}">${labels[o]}</button>`).join('')}</div>`;
+}
+function bindSeg(root,cb){root.addEventListener('click',e=>{const b=e.target.closest('.seg button');if(!b)return;const s=b.parentElement;const was=b.classList.contains('on');$$('button',s).forEach(x=>x.classList.remove('on'));const v=was?'':b.dataset.v;if(v)b.classList.add('on');cb(s.dataset.seg,v,b.dataset.v)})}
+function resChip(r){return r?`<span class="chip ${({full:'g',part:'y',none:'r',na:'n'})[r]}">${RES[r]}</span>`:'<span class="chip">未填</span>'}
+function worst(rs){const order=['none','part','full'];const v=rs.filter(r=>r&&r!=='na');if(!v.length)return '';return order.find(o=>v.includes(o))}
+function ring(score,size=84){
+  const r=34,c=2*Math.PI*r,v=score==null?0:score;
+  const col=score==null?'#cbd5e1':v>=.8?'#15803d':v>=.5?'#d97706':'#b91c1c';
+  return `<svg class="ring" viewBox="0 0 84 84" width="${size}" height="${size}"><circle cx="42" cy="42" r="${r}" fill="none" stroke="#e6efe9" stroke-width="9"/><circle cx="42" cy="42" r="${r}" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${c*v} ${c}" transform="rotate(-90 42 42)"/><text x="42" y="47" text-anchor="middle" font-size="17" font-weight="700" fill="${col}">${score==null?'—':Math.round(v*100)+'%'}</text></svg>`;
+}
+
+/* ===== top bar ===== */
+function renderTopbar(active){
+  window.PAGE_PART=active;
+  const pages=[['field','現場主管版（動態）','index.html'],['director','院長版（決策）','director.html'],['static','修改後靜態檢核表','static.html']];
+  const el=document.createElement('header');el.className='topbar';
+  el.innerHTML=`<div class="inner"><div class="brand"><div class="dot">檢</div><div>115年隔離醫院緊急應變檢核<small>動態量能 → 院級決策 → 靜態整備</small></div></div>
+  <nav class="flow">${pages.map((p,i)=>`${i?'<span class="arr">▶</span>':''}<a href="${p[2]}" class="${p[0]===active?'on':''}">${i+1}. ${p[1]}</a>`).join('')}</nav>
+  <div class="tools"><button class="btn" id="bCloud" title="雲端同步設定"><span id="cloudSt">☁ 雲端：未設定</span></button><button class="btn" id="bDemo">載入示範資料</button><button class="btn" id="bExp">匯出／匯入 JSON</button><button class="btn" id="bPrt">列印</button><button class="btn danger" id="bClr">清除</button></div></div>`;
+  document.body.prepend(el);
+  $('#bExp').onclick=dataDialog;
+  $('#bPrt').onclick=()=>{try{window.print()}catch(e){toast('此檢視環境無法列印，請下載後以瀏覽器開啟列印')}};
+  $('#bClr').onclick=async()=>{if(await ask('清除三份檢核表的所有已填資料？此動作無法復原。','清除')){const b=Store.blank();Store.write(b,ALL_PARTS);await Cloud.push(true);location.reload()}};
+  $('#bDemo').onclick=async()=>{if(await ask('以示範資料覆蓋目前內容？','載入')){Store.write(demoData(),ALL_PARTS);await Cloud.push(true);location.reload()}};
+  $('#bCloud').onclick=cloudDialog;
+  window.addEventListener('storage',e=>{if(e.key===STORE_KEY&&window.onExternalUpdate)window.onExternalUpdate()});
+  Cloud.start();
+}
+
+/* ===== 示範資料 ===== */
+function demoData(){
+  const db=Store.blank(); const now=new Date(); now.setMinutes(0,0,0);
+  const loc=d=>{const p=x=>String(x).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`};
+  const day=k=>{const d=new Date(now.getTime()+k*864e5);return d.toISOString().slice(0,10)};
+  db.field.meta={hospital:'示範醫院',reporter:'王護理長',unit:'感控室／護理部',dataTime:loc(now),shift:'白班',disease:'新興呼吸道傳染病（成人）',stage:'第一區收治'};
+  db.field.zones=[
+    {name:'第一區',care:'負壓隔離／一般照護',status:'已啟用',planned:20,accepted:18,admitted:15,staff:9,minStaff:10,equipGap:'HFNC 缺 2 台',readyTime:'',todo:'夜班呼吸治療師缺 1'},
+    {name:'第二區',care:'擴充準備（含中重度）',status:'整備中',planned:30,accepted:0,admitted:0,staff:4,minStaff:12,equipGap:'供氧管路待醫工確認',readyTime:loc(new Date(now.getTime()+3*864e5)),todo:'原病人安置 6 床未完成'},
+    {name:'第三區',care:'預備支援',status:'未啟動',planned:40,accepted:0,admitted:0,staff:0,minStaff:14,equipGap:'呼吸器未配置',readyTime:loc(new Date(now.getTime()+9*864e5)),todo:'外科護理 PPE 訓練 40%'},
+  ];
+  db.field.ops={edWait:7,dailyNew:2,ventTotal:12,ventUsed:9,icuTotal:10,icuUsed:7,ppeDays:9,ppeLead:12,o2Load:72,prepDays:3,bufferDays:1,exhausted:false};
+  const r=['full','full','part','part','part','full','part','none','full','part','full','part'];
+  const ev={B1:'急診→第一區動線圖、交接表 v2（11/15 修訂）',B2:'床位盤點表（每班更新）',B6:'外援人員訓練簽到與能力確認表',B9:'第一區聯合驗收紀錄 11/10',B11:'醫療網轉院窗口名單'};
+  const gap={B3:'第二區原病人 6 床尚未安置；開區驗收未排程',B4:'第三區外科護理 PPE 訓練完成 40%',B5:'第一區夜班呼吸治療師缺 1；替補名單未定',B7:'HFNC 缺 2 台；第二區供氧容量待醫工確認',B8:'N95 可用 9 天，補貨交期 12 天，無替代來源',B10:'一般病房檢驗時段未調整',B12:'需求到位缺驗收紀錄；通訊備援未演練'};
+  B_ITEMS.forEach((b,i)=>db.field.items[b.id]={r:r[i],ev:ev[b.id]||'',gap:gap[b.id]||''});
+  db.field.needs=[
+    {id:'R-001',zone:'第一區',type:'人力',desc:'夜班呼吸治療師',qty:'1 人',raised:day(-2),due:day(1),status:'核准'},
+    {id:'R-002',zone:'全院',type:'物資',desc:'N95 口罩緊急採購',qty:'3,000 個',raised:day(-3),due:day(-1),status:'提出'},
+    {id:'R-003',zone:'第二區',type:'設備',desc:'HFNC 租借',qty:'4 台',raised:day(-1),due:day(3),status:'送達/到班'},
+    {id:'R-004',zone:'第二區',type:'空間',desc:'供氧管路容量確認與補強',qty:'—',raised:day(-1),due:day(2),status:'提出'},
+  ];
+  db.director={meta:{commander:'李院長',planVer:'v3.2／115.10',date:now.toISOString().slice(0,10)},
+    T:{T1:{r:'full'},T2:{r:'part'},T5:{r:'part',note:'N95 交期長於可撐天數'}},
+    decisions:{'R-002':{measure:'啟動緊急採購＋醫療網調撥 1,000 個',budget:'防疫專款 45 萬',owner:'總務室 陳組長',due:day(1),result:''},
+               'R-001':{measure:'自內科加護調派 1 名',budget:'—',owner:'呼吸治療科',due:day(1),result:'已到班待確認'}},
+    approvals:['啟動第二區整備','院內調人／調設備','採購／外包'],openGap:'N95 庫存、第一區夜班人力',fallback:'48 小時未到位 → 通報醫療網區指揮官申請調撥',sign:'',nextDate:day(2)};
+  db.static={meta:{},clauses:{}};
+  return db;
+}
+
+/* ===== in-page dialogs (取代 confirm/alert，於沙盒框架中亦可用) ===== */
+function modal(html){const w=document.createElement('div');w.className='mask';w.innerHTML=`<div class="dlg">${html}</div>`;document.body.appendChild(w);return w}
+function ask(msg,ok='確定'){return new Promise(res=>{const w=modal(`<p style="margin:0 0 16px">${esc(msg)}</p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-x>取消</button><button class="btn pri" data-ok>${esc(ok)}</button></div>`);
+  w.onclick=e=>{if(e.target.matches('[data-ok]')){w.remove();res(true)}else if(e.target===w||e.target.matches('[data-x]')){w.remove();res(false)}}})}
+function dataDialog(){
+  const json=JSON.stringify(Store.load(),null,2);
+  const w=modal(`<h3 style="margin:0 0 6px;color:var(--g900)">匯出／匯入資料</h3><p class="mini" style="margin:0 0 10px">跨電腦傳遞：複製下方 JSON 或下載檔案；在另一台電腦貼上或選擇檔案後按「匯入」。</p>
+   <textarea id="jx" rows="12" style="font-family:ui-monospace,monospace;font-size:12px">${esc(json)}</textarea>
+   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-cp>複製</button><button class="btn" data-dl>下載 .json</button><label class="btn" style="cursor:pointer">選擇檔案<input type="file" accept=".json,application/json" hidden data-fl></label>
+   <span style="flex:1"></span><button class="btn" data-x>關閉</button><button class="btn pri" data-im>匯入上方內容</button></div>`);
+  const ta=$('#jx',w);
+  w.onclick=async e=>{const t=e.target;
+    if(t===w||t.matches('[data-x]'))w.remove();
+    else if(t.matches('[data-cp]')){try{await navigator.clipboard.writeText(ta.value);toast('已複製')}catch(_){ta.select();toast('請按 Ctrl/⌘+C 複製')}}
+    else if(t.matches('[data-dl]')){try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ta.value],{type:'application/json'}));a.download='檢核表資料_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove()}catch(_){};toast('若未開始下載，請改用「複製」')}
+    else if(t.matches('[data-im]')){try{const d=JSON.parse(ta.value);if(!d.field)throw 0;Store.write(d,ALL_PARTS);await Cloud.push(true);location.reload()}catch(_){toast('JSON 格式不符，請確認內容')}}};
+  $('[data-fl]',w).onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{ta.value=r.result;toast('已載入檔案，按「匯入上方內容」套用')};r.readAsText(f)};
+}
+
+/* ===== 雲端同步：Google 試算表＋Apps Script ===== */
+const GAS_DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbwFQ-vS22ejws2TzL-31kVxCR3hOW7EopbGqoD9dmE-RbwRswfP3rPvXYzYTsDLRPc0ew/exec'; // 可直接填入 Apps Script 網頁應用程式網址，所有人開啟即自動連線
+const ALL_PARTS=['field','director','static'];
+const GAS_CODE = "/**\n * 115年隔離醫院緊急應變檢核表 — Google 試算表後端（Demo 用）\n * 使用方式：在試算表中「擴充功能 → Apps Script」，貼上本程式碼，\n * 執行一次 setup()，再「部署 → 新增部署作業 → 網頁應用程式」\n * （執行身分：我；存取權：所有人），複製網址貼到檢核表的「雲端同步設定」。\n */\nconst SHEETS = {\n  store: '資料儲存',\n  log: '異動紀錄',\n  kpi: 'KPI紀錄',\n  needs: '需求追蹤',\n  items: '查核結果',\n};\nconst PARTS = ['field', 'director', 'static'];\nconst PART_NAME = { field: '現場主管版', director: '院長版', static: '靜態檢核表' };\nconst RES = { full: '完全符合', part: '部分符合', none: '無規劃', na: '不適用' };\n\nfunction setup() {\n  const ss = SpreadsheetApp.getActiveSpreadsheet();\n  const mk = (name, header) => {\n    let sh = ss.getSheetByName(name);\n    if (!sh) sh = ss.insertSheet(name);\n    if (header && sh.getLastRow() === 0) {\n      sh.appendRow(header);\n      sh.getRange(1, 1, 1, header.length).setFontWeight('bold').setBackground('#dcfce7');\n      sh.setFrozenRows(1);\n    }\n    return sh;\n  };\n  const st = mk(SHEETS.store, ['部分', 'JSON 資料（請勿手動修改）', '更新時間']);\n  PARTS.forEach((p, i) => { if (!st.getRange(i + 2, 1).getValue()) st.getRange(i + 2, 1).setValue(p); });\n  mk(SHEETS.log, ['時間', '頁面', '醫院', '填報／簽核人', '摘要']);\n  mk(SHEETS.kpi, ['時間', '醫院', '警示燈號', '湧入分級', '已驗收可用床', '已收治', '可再收', '佔床率', '急診等床(時)', '呼吸器佔用', 'ICU佔用', '預估滿床(天)', '最晚決策(天)', '最先不足資源', 'B1–B12符合度']);\n  mk(SHEETS.needs, ['需求編號', '區域', '類型', '需求內容', '數量', '提出日', '需到位期限', '進度', '院長核定措施', '經費', '執行人', '完成期限', '到位與驗收結果']);\n  mk(SHEETS.items, ['項目', '主題', '結果', '佐證', '缺口／說明', '更新時間']);\n  const def = ss.getSheetByName('工作表1') || ss.getSheetByName('Sheet1');\n  if (def && ss.getSheets().length > 1 && def.getLastRow() === 0) ss.deleteSheet(def);\n}\n\nfunction readAll_() {\n  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEETS.store);\n  if (!sh) throw new Error('尚未執行 setup()');\n  const out = {};\n  PARTS.forEach((p, i) => {\n    const v = sh.getRange(i + 2, 2).getValue();\n    if (v) { try { out[p] = JSON.parse(v); } catch (e) {} }\n  });\n  return out;\n}\n\nfunction json_(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet() {\n  try { return json_({ ok: true, data: readAll_(), serverTime: Date.now() }); }\n  catch (e) { return json_({ ok: false, error: String(e) }); }\n}\n\nfunction doPost(e) {\n  const lock = LockService.getScriptLock();\n  lock.waitLock(20000);\n  try {\n    const body = JSON.parse(e.postData.contents);\n    const ss = SpreadsheetApp.getActiveSpreadsheet();\n    const st = ss.getSheetByName(SHEETS.store);\n    if (!st) throw new Error('尚未執行 setup()');\n    const now = new Date();\n    const saved = [];\n    PARTS.forEach((p, i) => {\n      const part = body.parts && body.parts[p];\n      if (!part) return;\n      const cur = st.getRange(i + 2, 2).getValue();\n      let curTs = 0; try { curTs = cur ? (JSON.parse(cur)._ts || 0) : 0; } catch (x) {}\n      if ((part._ts || 0) < curTs) return; // 雲端較新，不覆蓋\n      const s = JSON.stringify(part);\n      if (s.length > 49000) throw new Error(p + ' 資料過大（超過試算表儲存格上限）');\n      st.getRange(i + 2, 1, 1, 3).setValues([[p, s, now]]);\n      saved.push(p);\n    });\n    const all = readAll_();\n    const f = all.field || {}, meta = f.meta || {};\n    if (saved.length) {\n      ss.getSheetByName(SHEETS.log).appendRow([now, saved.map(p => PART_NAME[p]).join('、'), meta.hospital || '', body.by || '', body.summary || '']);\n    }\n    if (body.kpi && saved.indexOf('field') > -1) {\n      const k = body.kpi;\n      ss.getSheetByName(SHEETS.kpi).appendRow([now, meta.hospital || ''].concat(['level', 'surge', 'accAll', 'admAll', 'remAll', 'occAll', 'edWait', 'ventOcc', 'icuOcc', 'daysToFull', 'latestDays', 'first', 'comp'].map(x => k[x] == null ? '' : k[x])));\n    }\n    if (saved.indexOf('field') > -1 || saved.indexOf('director') > -1) writeNeeds_(ss, all);\n    if (saved.indexOf('field') > -1) writeItems_(ss, f, now);\n    return json_({ ok: true, saved: saved, data: all, serverTime: Date.now() });\n  } catch (err) {\n    return json_({ ok: false, error: String(err) });\n  } finally {\n    lock.releaseLock();\n  }\n}\n\nfunction writeNeeds_(ss, all) {\n  const sh = ss.getSheetByName(SHEETS.needs);\n  const needs = (all.field && all.field.needs) || [];\n  const dec = (all.director && all.director.decisions) || {};\n  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 13).clearContent();\n  if (!needs.length) return;\n  const rows = needs.map(x => { const d = dec[x.id] || {}; return [x.id || '', x.zone || '', x.type || '', x.desc || '', x.qty || '', x.raised || '', x.due || '', x.status || '提出', d.measure || '', d.budget || '', d.owner || '', d.due || '', d.result || '']; });\n  sh.getRange(2, 1, rows.length, 13).setValues(rows);\n}\n\nfunction writeItems_(ss, f, now) {\n  const sh = ss.getSheetByName(SHEETS.items);\n  const items = f.items || {};\n  const titles = { B1: '急診接收與交接', B2: '三區實際量能', B3: '第二區擴充整備', B4: '第三區預備支援', B5: '各班人力與長期支持', B6: '跨科及外援能力', B7: '設備與供氧能力', B8: '物資與藥品供應', B9: '分區感控與聯合驗收', B10: '醫療服務與後勤銜接', B11: '量能不足與轉院', B12: '資源到位與異常回報' };\n  const rows = Object.keys(titles).map(id => { const v = items[id] || {}; return [id, titles[id], RES[v.r] || '', v.ev || '', v.gap || '', now]; });\n  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 6).clearContent();\n  sh.getRange(2, 1, rows.length, 6).setValues(rows);\n}\n";
+const Cloud = {
+  KEY:'icp115_gas_url', DKEY:'icp115_dirty', timer:null, poll:null, busy:false, state:'off', last:null, err:'',
+  url(){try{return localStorage.getItem(Cloud.KEY)||GAS_DEFAULT_URL}catch(e){return GAS_DEFAULT_URL}},
+  setUrl(u){try{u?localStorage.setItem(Cloud.KEY,u):localStorage.removeItem(Cloud.KEY)}catch(e){}},
+  dirty(){try{return JSON.parse(localStorage.getItem(Cloud.DKEY)||'[]')}catch(e){return []}},
+  setDirty(a){try{localStorage.setItem(Cloud.DKEY,JSON.stringify([...new Set(a)]))}catch(e){}},
+  markDirty(parts){if(!parts||!parts.length)return;Cloud.setDirty(Cloud.dirty().concat(parts));Cloud.schedule()},
+  schedule(){if(!Cloud.url())return;clearTimeout(Cloud.timer);Cloud.status('pending');Cloud.timer=setTimeout(()=>Cloud.push(),1500)},
+  status(st,msg){Cloud.state=st;if(msg!=null)Cloud.err=msg;const el=document.getElementById('cloudSt');if(!el)return;
+    const map={off:'☁ 雲端：未設定',pending:'☁ 待上傳…',sync:'☁ 同步中…',ok:'☁ 已同步 '+(Cloud.last?fmtDT(Cloud.last).split(' ')[1]:''),err:'☁ 同步失敗'};
+    el.textContent=map[st]||st; el.parentElement.style.color=st==='err'?'var(--red)':st==='ok'?'var(--g700)':''; el.parentElement.title=st==='err'?Cloud.err:'雲端同步設定'},
+  summary(db){
+    const k=computeKPI(db.field);
+    return {kpi:{level:LEVEL[k.level].name,surge:SURGE[k.surge].name,accAll:k.accAll,admAll:k.admAll,remAll:k.remAll,occAll:pct(k.occAll),edWait:k.edWait,ventOcc:pct(k.ventOcc),icuOcc:pct(k.icuOcc),
+        daysToFull:k.daysToFull==null?'':+fx(k.daysToFull),latestDays:k.latestDays==null?'':+fx(k.latestDays),first:k.first?k.first.res:'',comp:pct(k.comp.score)},k};
+  },
+  async req(method,body){
+    const u=Cloud.url(); if(!u) throw new Error('未設定網址');
+    const r=await fetch(u,method==='GET'?{method:'GET'}:{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
+    const j=await r.json(); if(!j.ok) throw new Error(j.error||'伺服器錯誤'); return j;
+  },
+  async push(force){
+    if(!Cloud.url()) return; const d=Cloud.dirty(); if(!d.length&&!force) return;
+    if(Cloud.busy){Cloud.schedule();return} Cloud.busy=true; Cloud.status('sync');
+    try{
+      const db=Store.load(), parts={}; d.forEach(p=>{if(db[p])parts[p]=db[p]});
+      const {kpi,k}=Cloud.summary(db);
+      const by=PAGE_PART==='field'?(db.field.meta.reporter||''):PAGE_PART==='director'?((db.director.meta||{}).commander||''):'';
+      const summary=d.includes('field')?`${LEVEL[k.level].name}｜可再收 ${k.remAll}｜B符合度 ${pct(k.comp.score)}｜需求 ${k.needs.total} 件`:
+        d.includes('director')?`核定事項 ${(db.director.approvals||[]).length} 項｜T 已確認 ${Object.values(db.director.T||{}).filter(x=>x.r).length}/8`:
+        `靜態條文已判定 ${Object.values(db.static.clauses||{}).filter(x=>x.r).length} 條`;
+      const sent={}; d.forEach(p=>sent[p]=(db[p]||{})._ts);
+      const j=await Cloud.req('POST',{parts,kpi,by,summary});
+      const now=Store.load(); Cloud.setDirty(Cloud.dirty().filter(p=>(now[p]||{})._ts!==sent[p]));
+      Cloud.last=new Date(); Cloud.status('ok','');
+      Cloud.apply(j.data);
+    }catch(e){Cloud.status('err',String(e.message||e))}
+    finally{Cloud.busy=false; if(Cloud.dirty().length&&Cloud.state!=='err') Cloud.schedule()}
+  },
+  async pull(){
+    if(!Cloud.url()||Cloud.busy) return; Cloud.busy=true; if(Cloud.state!=='pending')Cloud.status('sync');
+    try{const j=await Cloud.req('GET');Cloud.last=new Date();Cloud.status(Cloud.dirty().length?'pending':'ok','');Cloud.apply(j.data)}
+    catch(e){Cloud.status('err',String(e.message||e))}
+    finally{Cloud.busy=false}
+  },
+  pendingApply:false,
+  apply(data){
+    if(!data) return; const db=Store.load(), dirty=Cloud.dirty(); let ch=false;
+    ALL_PARTS.forEach(p=>{const r=data[p];if(r&&(r._ts||0)>((db[p]||{})._ts||0)&&!dirty.includes(p)){db[p]=r;ch=true}});
+    if(!ch) return; Store.raw(db);
+    const ae=document.activeElement, typing=ae&&ae.matches&&ae.matches('main input,main textarea,main select');
+    if(typing||Store._t){Cloud.pendingApply=true;return}
+    Cloud.pendingApply=false; if(window.onExternalUpdate) window.onExternalUpdate(); toast('已載入雲端最新資料');
+  },
+  start(){
+    if(!Cloud.url()){Cloud.status('off');return}
+    Cloud.status('sync');
+    (Cloud.dirty().length?Cloud.push():Cloud.pull());
+    clearInterval(Cloud.poll); Cloud.poll=setInterval(()=>{if(document.hidden)return; Cloud.dirty().length?Cloud.push():Cloud.pull()},30000);
+    window.addEventListener('focus',()=>Cloud.pull());
+    document.addEventListener('focusout',()=>setTimeout(()=>{if(Cloud.pendingApply){const ae=document.activeElement;if(!(ae&&ae.matches&&ae.matches('main input,main textarea,main select'))){Cloud.pendingApply=false;window.onExternalUpdate&&window.onExternalUpdate();toast('已載入雲端最新資料')}}},300));
+  },
+};
+function cloudDialog(){
+  const u=Cloud.url();
+  const w=modal(`<h3 style="margin:0 0 6px;color:var(--g900)">雲端同步（Google 試算表）</h3>
+   <p class="mini" style="margin:0 0 10px">設定後三個頁面自動同步：填寫後約 2 秒上傳；開啟頁面時載入最新資料，之後每 30 秒更新。所有使用同一個網址的電腦都看到同一份資料。</p>
+   <label class="f">Apps Script 網頁應用程式網址<input type="text" id="gu" placeholder="https://script.google.com/macros/s/……/exec" value="${esc(u)}"></label>
+   <div class="mini" id="gmsg" style="margin-top:6px;min-height:18px">${Cloud.state==='err'?'<span style="color:var(--red)">上次同步失敗：'+esc(Cloud.err)+'</span>':Cloud.last?'上次同步：'+fmtDT(Cloud.last):''}</div>
+   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn" data-t>測試連線</button>${u?'<button class="btn danger" data-off>停用同步</button>':''}<span style="flex:1"></span><button class="btn" data-x>關閉</button><button class="btn pri" data-sv>儲存並連線</button></div>
+   <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:600;color:var(--g800)">第一次設定步驟（約 5 分鐘）</summary>
+   <ol class="mini" style="padding-left:18px;line-height:1.8">
+   <li>到 Google 雲端硬碟建立一個新的 Google 試算表（名稱自訂，例如「隔離醫院應變檢核 Demo」）。</li>
+   <li>試算表上方選單「擴充功能 → Apps Script」，刪除預設內容，貼上下方程式碼，按儲存。</li>
+   <li>上方函式選單選 <b>setup</b> → 按「執行」，依提示授權（第一次會出現「Google 尚未驗證這個應用程式」，點「進階 → 前往（不安全）」，這是您自己的程式）。</li>
+   <li>右上「部署 → 新增部署作業」→ 類型選「網頁應用程式」；執行身分：<b>我</b>；誰可以存取：<b>所有人</b> → 部署。</li>
+   <li>複製「網頁應用程式網址」（結尾是 /exec），貼到上方欄位，按「儲存並連線」。</li>
+   <li>之後修改程式碼要重新部署：「部署 → 管理部署作業 → 編輯 → 版本：新版本」，網址不變。</li></ol>
+   <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><b class="mini">Apps Script 程式碼</b><button class="btn sm" data-cpc>複製程式碼</button></div>
+   <textarea id="gcode" rows="8" readonly style="font-family:ui-monospace,monospace;font-size:11.5px">${esc(GAS_CODE)}</textarea>
+   <p class="mini">注意：「所有人」代表知道網址的人都能讀寫資料，僅適合 Demo，請勿填入真實病人個資。</p></details>`);
+  const msg=t=>$('#gmsg',w).innerHTML=t;
+  w.onclick=async e=>{const t=e.target;
+    if(t===w||t.matches('[data-x]')) w.remove();
+    else if(t.matches('[data-cpc]')){const ta=$('#gcode',w);try{await navigator.clipboard.writeText(ta.value);toast('已複製程式碼')}catch(_){ta.focus();ta.select();toast('請按 Ctrl/⌘+C 複製')}}
+    else if(t.matches('[data-off]')){Cloud.setUrl('');clearInterval(Cloud.poll);Cloud.status('off');w.remove();toast('已停用雲端同步，資料只存在本機')}
+    else if(t.matches('[data-t]')||t.matches('[data-sv]')){
+      const v=$('#gu',w).value.trim(); if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(v)){msg('<span style="color:var(--red)">網址格式不符，應為 https://script.google.com/macros/s/…/exec</span>');return}
+      msg('連線中…'); const old=Cloud.url(); Cloud.setUrl(v);
+      try{const j=await Cloud.req('GET'); const has=ALL_PARTS.filter(p=>j.data&&j.data[p]);
+        if(t.matches('[data-t]')){Cloud.setUrl(old);msg(`<span style="color:var(--g700)">✓ 連線成功。</span>雲端目前${has.length?'有資料（'+has.map(p=>({field:'現場',director:'院長',static:'靜態'})[p]).join('、')+'）':'沒有資料'}。`);return}
+        w.remove();
+        if(has.length){ if(await ask('雲端已有資料。要以雲端資料取代這台電腦的內容嗎？（選「取消」則改以本機資料上傳覆蓋雲端）','使用雲端資料')){const db=Store.load();has.forEach(p=>db[p]=j.data[p]);Cloud.setDirty([]);Store.raw(db);location.reload();return}
+          const db=Store.load();Store.write(db,ALL_PARTS);}
+        else {const db=Store.load();Store.write(db,ALL_PARTS);}
+        await Cloud.push(true); Cloud.start(); toast('已連線雲端同步');
+      }catch(err){Cloud.setUrl(old);msg('<span style="color:var(--red)">連線失敗：'+esc(err.message||err)+'。請確認已部署為「網頁應用程式」且存取權為「所有人」。若在 claude.ai 預覽中開啟，外部連線會被擋，請改用 GitHub Pages 或本機開啟。</span>')}
+    }};
+}
+</script>
+</head><body>
+<main>
+  <div class="page-title">
+    <div><h1>現場主管版｜動態量能簡易查核</h1>
+      <p>感控、醫護主管填寫：三區實際量能、營運指標、B1–B12 查核與資源需求。填完即時產生 KPI，並自動送到院長版。</p></div>
+    <div class="saved" id="savedAt">尚未儲存</div>
+  </div>
+
+  <div class="layout">
+  <div>
+    <section class="card">
+      <div class="sec-h"><span class="tag">基本</span><h2>填報資訊</h2></div>
+      <div class="grid g3">
+        <label class="f">醫院名稱<input type="text" data-m="hospital"></label>
+        <label class="f">填報主管<input type="text" data-m="reporter" placeholder="姓名／職稱"></label>
+        <label class="f">單位<input type="text" data-m="unit" placeholder="感控室／護理部…"></label>
+        <label class="f">資料時間<input type="datetime-local" data-m="dataTime"></label>
+        <label class="f">適用班別<select data-m="shift"><option></option><option>白班</option><option>小夜</option><option>大夜</option></select></label>
+        <label class="f">適用疾病與照護對象<input type="text" data-m="disease"></label>
+      </div>
+      <div style="margin-top:10px"><span class="mini">目前階段：</span>
+        <span class="cbx" id="stage" style="display:inline-flex"></span></div>
+    </section>
+
+    <section class="card">
+      <div class="sec-h"><span class="tag">A</span><h2>三區量能與啟用準備總覽</h2><span class="hint">虛線欄位為自動計算</span></div>
+      <div class="grid g3" id="zones"></div>
+      <p class="note">「已驗收可用」須確認適用班別的人力、設備、供氧、物資與隔離條件均符合預定照護需求；未符合者請維持「整備中／待驗收」。</p>
+    </section>
+
+    <section class="card">
+      <div class="sec-h"><span class="tag">B</span><h2>院級營運指標</h2><span class="hint"><span class="chip g">系統</span> 可由醫院資訊系統帶入</span></div>
+      <div class="grid g4" id="ops"></div>
+      <div style="margin-top:12px" class="cbx"><label><input type="checkbox" id="exhausted"> 設備已用罄，且無可用調借或外部支援管道（觸發紫燈）</label></div>
+    </section>
+
+    <section class="card">
+      <div class="sec-h"><span class="tag">C</span><h2>正式查核 12 項（B1–B12）</h2><span class="hint">全＝安排具體、佐證可核對；部＝尚有缺口；無＝尚無具體規劃</span></div>
+      <div id="items"></div>
+      <p class="note">搭配 115 年原表 5-3 分階段收治、5-4 人力動員、5-5 資源掌控及 5-7 病人照護計畫。每題對應的院長 T 項與靜態條文標示於右下。</p>
+    </section>
+
+    <section class="card">
+      <div class="sec-h"><span class="tag">D</span><h2>資源需求追蹤</h2><span class="hint">需求編號與院長版共用</span>
+        <button class="btn sm pri" id="addNeed" style="margin-left:8px">＋新增需求</button></div>
+      <div id="needs"></div>
+      <p class="note">追蹤路徑：提出 → 核准 → 送達／到班 → 驗收 → 可用。超過期限仍未「可用」者會在院長版標示逾期。</p>
+    </section>
+  </div>
+
+  <aside class="side" id="side"></aside>
+  </div>
+</main>
+<script>
+renderTopbar('field');
+let db=Store.load(); const F=()=>db.field;
+const OPS=[
+ ['edWait','急診等床時間','小時',1],['dailyNew','每日預估新增收治','人',0],
+ ['ventTotal','呼吸器總數','台',1],['ventUsed','呼吸器使用中','台',1],
+ ['icuTotal','ICU／重症床總數','床',1],['icuUsed','ICU／重症床佔用','床',1],
+ ['ppeDays','PPE 可用天數','天',1],['ppeLead','PPE 補貨交期','天',0],
+ ['o2Load','供氧系統負載','%',1],['prepDays','下一區整備＋驗收工期','天',0],['bufferDays','安全緩衝','天',0]];
+const STAGES=['常態整備','第一區收治','第二區擴充','第三區啟用'];
+
+function buildStatic(){
+  $$('[data-m]').forEach(el=>{el.value=F().meta[el.dataset.m]||'';el.oninput=()=>{F().meta[el.dataset.m]=el.value;changed()}});
+  $('#stage').innerHTML=STAGES.map(s=>`<label><input type="radio" name="stage" value="${s}" ${F().meta.stage===s?'checked':''}>${s}</label>`).join('');
+  $$('#stage input').forEach(r=>r.onchange=()=>{F().meta.stage=r.value;changed()});
+  // zones
+  $('#zones').innerHTML=F().zones.map((z,i)=>`<div class="zone-col card soft" style="margin:0">
+    <h4><span class="chip g">${['隔離照護','擴充準備','預備支援'][i]}</span>${z.name}</h4>
+    <div class="grid" style="gap:8px">
+      <label class="f">照護類型<input type="text" data-z="${i}" data-k="care" value="${esc(z.care)}"></label>
+      <label class="f">目前狀態<select data-z="${i}" data-k="status">${ZONE_STATUS.map(s=>`<option ${z.status===s?'selected':''}>${s}</option>`).join('')}</select></label>
+      <div class="grid g2" style="gap:8px">
+        ${num(i,'planned','規劃床數','床')}${num(i,'accepted','已驗收可用','床')}
+        ${num(i,'admitted','已收治','人')}<label class="f">可再收治<input type="text" class="auto" readonly data-auto="rem${i}"></label>
+        ${num(i,'staff','當班合格人力','人')}${num(i,'minStaff','最低人力需求','人')}
+      </div>
+      <div class="mini" data-auto="zk${i}"></div>
+      <label class="f">主要設備缺口<input type="text" data-z="${i}" data-k="equipGap" value="${esc(z.equipGap)}"></label>
+      <label class="f">預計完成整備時間<input type="datetime-local" data-z="${i}" data-k="readyTime" value="${esc(z.readyTime)}"></label>
+      <label class="f">最主要未完成事項<textarea data-z="${i}" data-k="todo" rows="2">${esc(z.todo)}</textarea></label>
+    </div></div>`).join('');
+  $$('[data-z]').forEach(el=>el.oninput=el.onchange=()=>{F().zones[+el.dataset.z][el.dataset.k]=el.value;changed()});
+  // ops
+  $('#ops').innerHTML=OPS.map(([k,l,u,sys])=>`<label class="f"><span>${l} ${sys?'<span class="chip g" style="font-size:10.5px;padding:0 6px">系統</span>':''}</span><div class="unit"><input type="number" min="0" step="any" data-o="${k}" value="${esc(F().ops[k])}"><span>${u}</span></div></label>`).join('')+
+    `<label class="f">呼吸器佔用率<input type="text" class="auto" readonly data-auto="vent"></label><label class="f">ICU 佔用率<input type="text" class="auto" readonly data-auto="icu"></label><label class="f">PPE 安全餘裕（天數−交期）<input type="text" class="auto" readonly data-auto="ppem"></label>`;
+  $$('[data-o]').forEach(el=>el.oninput=()=>{F().ops[el.dataset.o]=el.value;changed()});
+  $('#exhausted').checked=!!F().ops.exhausted; $('#exhausted').onchange=e=>{F().ops.exhausted=e.target.checked;changed()};
+  buildItems(); buildNeeds();
+}
+function num(i,k,l,u){return `<label class="f">${l}<div class="unit"><input type="number" min="0" data-z="${i}" data-k="${k}" value="${esc(F().zones[i][k])}"><span>${u}</span></div></label>`}
+
+function buildItems(){
+  $('#items').innerHTML=B_ITEMS.map(b=>{const v=F().items[b.id]||{};return `<div class="item st-${v.r||''}" id="it-${b.id}">
+   <div class="hd"><span class="code">${b.id}</span><div style="flex:1;min-width:240px"><div class="ttl">${b.t}</div><div class="q">${b.q}</div>
+   <div class="ev"><b>必要佐證：</b>${b.ev}</div></div>
+   <div class="right">${seg(b.id,v.r)}<div class="mini">→ 院長 ${b.T.join('、')}｜靜態 ${b.S.join('、')}</div></div></div>
+   <div class="body"><label class="f">佐證資料／確認內容<textarea data-i="${b.id}" data-k="ev" rows="2">${esc(v.ev)}</textarea></label>
+   <label class="f">缺口與說明（不適用須說明理由）<textarea data-i="${b.id}" data-k="gap" rows="2">${esc(v.gap)}</textarea></label></div></div>`}).join('');
+  $$('[data-i]').forEach(el=>el.oninput=()=>{(F().items[el.dataset.i]||(F().items[el.dataset.i]={}))[el.dataset.k]=el.value;changed()});
+}
+bindSeg($('#items'),(id,v)=>{(F().items[id]||(F().items[id]={})).r=v;$('#it-'+id).className='item st-'+v;changed()});
+
+function buildNeeds(){
+  const N=F().needs;
+  if(!N.length){$('#needs').innerHTML='<div class="empty">尚無資源需求。現場發現人力、設備、物資或空間缺口時，按「新增需求」送到院長版核定。</div>';return}
+  $('#needs').innerHTML=`<div class="tw"><table class="t"><thead><tr><th>編號</th><th>受影響區域</th><th>類型</th><th>需求內容</th><th>數量</th><th>提出日</th><th>需到位期限</th><th style="min-width:250px">進度</th><th></th></tr></thead><tbody>${N.map((x,i)=>`<tr>
+   <td><b>${esc(x.id)}</b></td>
+   <td><select data-n="${i}" data-k="zone">${['第一區','第二區','第三區','全院'].map(o=>`<option ${x.zone===o?'selected':''}>${o}</option>`).join('')}</select></td>
+   <td><select data-n="${i}" data-k="type">${['人力','設備','物資','藥品','空間','其他'].map(o=>`<option ${x.type===o?'selected':''}>${o}</option>`).join('')}</select></td>
+   <td><input type="text" data-n="${i}" data-k="desc" value="${esc(x.desc)}"></td>
+   <td style="width:90px"><input type="text" data-n="${i}" data-k="qty" value="${esc(x.qty)}"></td>
+   <td style="width:140px"><input type="date" data-n="${i}" data-k="raised" value="${esc(x.raised)}"></td>
+   <td style="width:140px"><input type="date" data-n="${i}" data-k="due" value="${esc(x.due)}"></td>
+   <td><div class="pipe" data-pipe="${i}">${NEED_FLOW.map((s,k)=>{const cur=NEED_FLOW.indexOf(x.status||'提出');return `<span class="${k<cur?'done':k===cur?'cur':''}" style="cursor:pointer" data-step="${s}">${s}</span>`}).join('')}</div></td>
+   <td><button class="btn sm ghost danger" data-del="${i}" title="刪除">✕</button></td></tr>`).join('')}</tbody></table></div>`;
+  $$('[data-n]').forEach(el=>el.oninput=el.onchange=()=>{N[+el.dataset.n][el.dataset.k]=el.value;changed(false)});
+  $$('[data-pipe] span').forEach(s=>s.onclick=()=>{N[+s.parentElement.dataset.pipe].status=s.dataset.step;changed();buildNeeds()});
+  $$('[data-del]').forEach(b=>b.onclick=async()=>{if(await ask('刪除需求 '+N[+b.dataset.del].id+'？','刪除')){N.splice(+b.dataset.del,1);changed();buildNeeds()}});
+}
+$('#addNeed').onclick=()=>{const N=F().needs;const mx=N.reduce((m,x)=>Math.max(m,+(x.id||'').replace(/\D/g,'')||0),0);
+  N.push({id:'R-'+String(mx+1).padStart(3,'0'),zone:'第一區',type:'人力',desc:'',qty:'',raised:new Date().toISOString().slice(0,10),due:'',status:'提出'});changed();buildNeeds()};
+
+function changed(){Store.saveSoon(db);renderKPI()}
+function renderKPI(){
+  const k=computeKPI(F()), L=LEVEL[k.level];
+  k.zones.forEach((z,i)=>{const r=$(`[data-auto=rem${i}]`);r.value=z.rem==null?'':z.rem+' 人';
+    $(`[data-auto=zk${i}]`).innerHTML=`佔床率 <b>${pct(z.occ)}</b>　人力達成 <b style="color:${z.staffRatio!=null&&z.staffRatio<1?'var(--red)':'inherit'}">${pct(z.staffRatio)}</b>`});
+  $('[data-auto=vent]').value=pct(k.ventOcc); $('[data-auto=icu]').value=pct(k.icuOcc);
+  $('[data-auto=ppem]').value=k.ppeMargin==null?'':(k.ppeMargin>=0?'+':'')+k.ppeMargin+' 天';
+  const c=k.comp, s=k.needs;
+  const cls=(v,w,b)=>v==null?'':v>=b?'bad':v>=w?'warn':'good';
+  $('#side').innerHTML=`
+   <div class="card"><div class="alert ${L.cls}"><div class="lamp">${L.lamp}</div><div><h3>${L.name}</h3><p>${k.reasons.join('；')}</p></div></div>
+     <p class="note"><b>應變行動：</b>${L.act}<br><b>主責：</b>${L.owner}</p>
+     <hr class="s"><div class="mini">病人湧入分級（依目前收治 ${k.admAll} 人）</div>
+     <div style="font-weight:700;color:var(--g900);margin-top:2px">${SURGE[k.surge].name}</div><div class="mini">${SURGE[k.surge].d}</div></div>
+   <div class="card"><div class="sec-h" style="margin-bottom:8px"><h2 style="font-size:14px">即時 KPI｜院長將看到</h2></div>
+    <div class="kpis" style="grid-template-columns:1fr 1fr">
+     <div class="kpi"><div class="k">已驗收可用床</div><div class="v">${k.accAll}<small>/ 規劃 ${k.plannedAll}</small></div><div class="s">已啟用區</div></div>
+     <div class="kpi ${k.remAll<=2&&k.accAll?'bad':''}"><div class="k">目前可再收</div><div class="v">${k.remAll}<small>人</small></div></div>
+     <div class="kpi ${cls(k.occAll,.8,.9)}"><div class="k">專責病床佔床率</div><div class="v">${pct(k.occAll)}</div><div class="bar ${cls(k.occAll,.8,.9)}"><i style="width:${Math.min(100,(k.occAll||0)*100)}%"></i></div></div>
+     <div class="kpi ${k.edWait>=6?'warn':''}"><div class="k">急診等床</div><div class="v">${k.edWait==null?'—':k.edWait}<small>小時</small></div></div>
+     <div class="kpi ${cls(k.ventOcc,.7,.85)}"><div class="k">呼吸器佔用</div><div class="v">${pct(k.ventOcc)}</div></div>
+     <div class="kpi ${cls(k.icuOcc,.7,.85)}"><div class="k">ICU 佔用</div><div class="v">${pct(k.icuOcc)}</div></div>
+     <div class="kpi ${k.daysToFull!=null&&k.daysToFull<3?'warn':''}"><div class="k">預估滿床</div><div class="v" style="font-size:19px">${fmtDays(k.daysToFull)}</div><div class="s">${fmtDT(k.gapAt)}</div></div>
+     <div class="kpi ${k.latestDays!=null&&k.latestDays<1?'bad':''}"><div class="k">最晚院長決策</div><div class="v" style="font-size:19px">${fmtDays(k.latestDays)}</div><div class="s">${fmtDT(k.latestAt)}</div></div>
+    </div>
+    <div class="kpi ${k.first&&k.first.days<3?'warn':''}" style="margin-top:10px"><div class="k">最先可能不足的資源</div><div style="font-weight:700;color:var(--g900)">${k.first?esc(k.first.res):'—'}</div><div class="s">${k.first?(k.first.days<=0?'目前已不足':'預估 '+fmtDays(k.first.days)+' 內'):'請填營運指標'}</div></div>
+   </div>
+   <div class="card"><div style="display:flex;gap:12px;align-items:center">${ring(c.score)}<div><div style="font-weight:700;color:var(--g900)">B1–B12 符合度</div>
+     <div class="mini">已填 ${c.done}/${c.total}</div><div class="legend" style="margin-top:4px"><span><i style="background:var(--g600)"></i>全 ${c.full}</span><span><i style="background:#f59e0b"></i>部 ${c.part}</span><span><i style="background:var(--red)"></i>無 ${c.none}</span><span><i style="background:#94a3b8"></i>不適用 ${c.na}</span></div></div></div>
+     <hr class="s"><div class="mini" style="margin-bottom:6px">資源需求 ${s.total} 件｜未結 ${s.open}｜<span style="color:${s.overdue.length?'var(--red)':'inherit'}">逾期 ${s.overdue.length}</span></div>
+     <div class="pipe">${NEED_FLOW.map(f=>`<span class="${s.by[f]?'done':''}">${f}<br><b>${s.by[f]}</b></span>`).join('')}</div>
+     <a class="btn pri noprint" style="display:block;text-align:center;margin-top:12px;text-decoration:none" href="director.html">送出 → 檢視院長版</a></div>`;
+}
+window.onExternalUpdate=()=>{db=Store.load();buildStatic();renderKPI()};
+buildStatic(); renderKPI(); Store._stamp(db);
+</script>
+
+</body></html>
