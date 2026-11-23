@@ -160,6 +160,19 @@ hr.s{border:0;border-top:1px solid var(--line);margin:14px 0}
 .fig{position:relative;height:340px}.fig>svg{position:absolute;inset:0;width:100%;height:100%;touch-action:pan-y}
 .tip{position:absolute;pointer-events:none;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;box-shadow:0 6px 18px rgba(15,61,46,.12);opacity:0;transition:opacity .12s;min-width:190px}
 @media(max-width:600px){.fig{height:280px}}
+.auth-gate{position:fixed;inset:0;z-index:9999;background:rgba(240,253,244,.96);backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px}
+.auth-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:28px 26px;max-width:440px;width:100%;box-shadow:0 20px 50px rgba(15,61,46,.16);text-align:center}
+.auth-card .dot{width:44px;height:44px;border-radius:12px;background:var(--g600);color:#fff;display:grid;place-items:center;font-size:20px;font-weight:700;margin:0 auto 12px}
+.auth-card h2{margin:0 0 6px;font-size:19px;color:var(--g900)}
+.auth-card p{margin:0 0 16px;font-size:13.5px;color:var(--muted);line-height:1.6}
+.auth-btn-wrap{display:flex;justify-content:center;min-height:44px;margin:12px 0}
+.auth-msg{font-size:13px;min-height:20px;margin-top:8px;line-height:1.5}
+.auth-msg.err{color:var(--red)}
+.auth-msg.ok{color:var(--g700)}
+.auth-user{display:inline-flex;align-items:center;gap:5px}
+.auth-role{font-size:11px;padding:1px 6px;border-radius:999px;background:var(--g100);color:var(--g800);font-weight:600}
+.auth-role.ro{background:var(--yel-bg);color:var(--yel)}
+body.locked main,body.locked header.topbar{filter:blur(4px);pointer-events:none;user-select:none}
 </style>
 <script>/* ===== 115年隔離醫院緊急應變檢核：三層共用資料層 ===== */
 const STORE_KEY = 'icp115_checklist_v1';
@@ -328,14 +341,18 @@ function renderTopbar(active){
   const el=document.createElement('header');el.className='topbar';
   el.innerHTML=`<div class="inner"><div class="brand"><div class="dot">檢</div><div>115年隔離醫院緊急應變檢核<small>動態量能 → 院級決策 → 靜態整備</small></div></div>
   <nav class="flow">${pages.map((p,i)=>`${i?'<span class="arr">▶</span>':''}<a href="${p[2]}" class="${p[0]===active?'on':''}">${i+1}. ${p[1]}</a>`).join('')}</nav>
-  <div class="tools"><button class="btn" id="bCloud" title="雲端同步設定"><span id="cloudSt">☁ 雲端：未設定</span></button><button class="btn" id="bDemo">載入示範資料</button><button class="btn" id="bExp">匯出／匯入 JSON</button><button class="btn" id="bPrt">列印</button><button class="btn danger" id="bClr">清除</button></div></div>`;
+  <div class="tools"><button class="btn" id="bAuth" title="Google 帳號登入狀態"><span id="authSt">Google 登入</span></button><button class="btn" id="bCloud" title="雲端同步設定"><span id="cloudSt">☁ 雲端：未設定</span></button><button class="btn" id="bDemo">載入示範資料</button><button class="btn" id="bExp">匯出／匯入 JSON</button><button class="btn" id="bPrt">列印</button><button class="btn danger" id="bClr">清除</button></div></div>`;
   document.body.prepend(el);
+  $('#bAuth').onclick=()=>Auth.dialog();
   $('#bExp').onclick=dataDialog;
   $('#bPrt').onclick=()=>{try{window.print()}catch(e){toast('此檢視環境無法列印，請下載後以瀏覽器開啟列印')}};
-  $('#bClr').onclick=async()=>{if(await ask('清除三份檢核表的所有已填資料？此動作無法復原。','清除')){const b=Store.blank();Store.write(b,ALL_PARTS);await Cloud.push(true);location.reload()}};
-  $('#bDemo').onclick=async()=>{if(await ask('以示範資料覆蓋目前內容？','載入')){Store.write(demoData(),ALL_PARTS);await Cloud.push(true);location.reload()}};
+  $('#bClr').onclick=async()=>{if(Auth.isViewer()){toast('唯讀權限，無法清除資料');return}if(await ask('清除三份檢核表的所有已填資料？此動作無法復原。','清除')){const b=Store.blank();Store.write(b,ALL_PARTS);await Cloud.push(true);location.reload()}};
+  $('#bDemo').onclick=async()=>{if(Auth.isViewer()){toast('唯讀權限，無法覆蓋示範資料');return}if(await ask('以示範資料覆蓋目前內容？','載入')){Store.write(demoData(),ALL_PARTS);await Cloud.push(true);location.reload()}};
   $('#bCloud').onclick=cloudDialog;
-  window.addEventListener('storage',e=>{if(e.key===STORE_KEY&&window.onExternalUpdate)window.onExternalUpdate()});
+  window.addEventListener('storage',e=>{
+    if(e.key===Auth.TKEY&&!e.newValue&&Auth.verified){Auth.logout(true);return}
+    if(e.key===STORE_KEY&&Auth.verified&&window.onExternalUpdate)window.onExternalUpdate();
+  });
   Cloud.start();
 }
 
@@ -389,18 +406,135 @@ function dataDialog(){
   $('[data-fl]',w).onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{ta.value=r.result;toast('已載入檔案，按「匯入上方內容」套用')};r.readAsText(f)};
 }
 
-/* ===== 雲端同步：Google 試算表＋Apps Script ===== */
-const GAS_DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbwFQ-vS22ejws2TzL-31kVxCR3hOW7EopbGqoD9dmE-RbwRswfP3rPvXYzYTsDLRPc0ew/exec'; // 可直接填入 Apps Script 網頁應用程式網址，所有人開啟即自動連線
+/* ===== 雲端同步：Google 試算表＋Apps Script（含 Google 登入白名單驗證） ===== */
+const GAS_DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbwFQ-vS22ejws2TzL-31kVxCR3hOW7EopbGqoD9dmE-RbwRswfP3rPvXYzYTsDLRPc0ew/exec'; // Apps Script 網頁應用程式網址
+const GOOGLE_CLIENT_ID = '617987658234-tb5q7dqalnbmdji0cu4okdf21isjl53m.apps.googleusercontent.com'; // Google Cloud OAuth 2.0 網頁用戶端 ID
 const ALL_PARTS=['field','director','static'];
-const GAS_CODE = "/**\n * 115年隔離醫院緊急應變檢核表 — Google 試算表後端（Demo 用）\n * 使用方式：在試算表中「擴充功能 → Apps Script」，貼上本程式碼，\n * 執行一次 setup()，再「部署 → 新增部署作業 → 網頁應用程式」\n * （執行身分：我；存取權：所有人），複製網址貼到檢核表的「雲端同步設定」。\n */\nconst SHEETS = {\n  store: '資料儲存',\n  log: '異動紀錄',\n  kpi: 'KPI紀錄',\n  needs: '需求追蹤',\n  items: '查核結果',\n};\nconst PARTS = ['field', 'director', 'static'];\nconst PART_NAME = { field: '現場主管版', director: '院長版', static: '靜態檢核表' };\nconst RES = { full: '完全符合', part: '部分符合', none: '無規劃', na: '不適用' };\n\nfunction setup() {\n  const ss = SpreadsheetApp.getActiveSpreadsheet();\n  const mk = (name, header) => {\n    let sh = ss.getSheetByName(name);\n    if (!sh) sh = ss.insertSheet(name);\n    if (header && sh.getLastRow() === 0) {\n      sh.appendRow(header);\n      sh.getRange(1, 1, 1, header.length).setFontWeight('bold').setBackground('#dcfce7');\n      sh.setFrozenRows(1);\n    }\n    return sh;\n  };\n  const st = mk(SHEETS.store, ['部分', 'JSON 資料（請勿手動修改）', '更新時間']);\n  PARTS.forEach((p, i) => { if (!st.getRange(i + 2, 1).getValue()) st.getRange(i + 2, 1).setValue(p); });\n  mk(SHEETS.log, ['時間', '頁面', '醫院', '填報／簽核人', '摘要']);\n  mk(SHEETS.kpi, ['時間', '醫院', '警示燈號', '湧入分級', '已驗收可用床', '已收治', '可再收', '佔床率', '急診等床(時)', '呼吸器佔用', 'ICU佔用', '預估滿床(天)', '最晚決策(天)', '最先不足資源', 'B1–B12符合度']);\n  mk(SHEETS.needs, ['需求編號', '區域', '類型', '需求內容', '數量', '提出日', '需到位期限', '進度', '院長核定措施', '經費', '執行人', '完成期限', '到位與驗收結果']);\n  mk(SHEETS.items, ['項目', '主題', '結果', '佐證', '缺口／說明', '更新時間']);\n  const def = ss.getSheetByName('工作表1') || ss.getSheetByName('Sheet1');\n  if (def && ss.getSheets().length > 1 && def.getLastRow() === 0) ss.deleteSheet(def);\n}\n\nfunction readAll_() {\n  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEETS.store);\n  if (!sh) throw new Error('尚未執行 setup()');\n  const out = {};\n  PARTS.forEach((p, i) => {\n    const v = sh.getRange(i + 2, 2).getValue();\n    if (v) { try { out[p] = JSON.parse(v); } catch (e) {} }\n  });\n  return out;\n}\n\nfunction json_(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet() {\n  try { return json_({ ok: true, data: readAll_(), serverTime: Date.now() }); }\n  catch (e) { return json_({ ok: false, error: String(e) }); }\n}\n\nfunction doPost(e) {\n  const lock = LockService.getScriptLock();\n  lock.waitLock(20000);\n  try {\n    const body = JSON.parse(e.postData.contents);\n    const ss = SpreadsheetApp.getActiveSpreadsheet();\n    const st = ss.getSheetByName(SHEETS.store);\n    if (!st) throw new Error('尚未執行 setup()');\n    const now = new Date();\n    const saved = [];\n    PARTS.forEach((p, i) => {\n      const part = body.parts && body.parts[p];\n      if (!part) return;\n      const cur = st.getRange(i + 2, 2).getValue();\n      let curTs = 0; try { curTs = cur ? (JSON.parse(cur)._ts || 0) : 0; } catch (x) {}\n      if ((part._ts || 0) < curTs) return; // 雲端較新，不覆蓋\n      const s = JSON.stringify(part);\n      if (s.length > 49000) throw new Error(p + ' 資料過大（超過試算表儲存格上限）');\n      st.getRange(i + 2, 1, 1, 3).setValues([[p, s, now]]);\n      saved.push(p);\n    });\n    const all = readAll_();\n    const f = all.field || {}, meta = f.meta || {};\n    if (saved.length) {\n      ss.getSheetByName(SHEETS.log).appendRow([now, saved.map(p => PART_NAME[p]).join('、'), meta.hospital || '', body.by || '', body.summary || '']);\n    }\n    if (body.kpi && saved.indexOf('field') > -1) {\n      const k = body.kpi;\n      ss.getSheetByName(SHEETS.kpi).appendRow([now, meta.hospital || ''].concat(['level', 'surge', 'accAll', 'admAll', 'remAll', 'occAll', 'edWait', 'ventOcc', 'icuOcc', 'daysToFull', 'latestDays', 'first', 'comp'].map(x => k[x] == null ? '' : k[x])));\n    }\n    if (saved.indexOf('field') > -1 || saved.indexOf('director') > -1) writeNeeds_(ss, all);\n    if (saved.indexOf('field') > -1) writeItems_(ss, f, now);\n    return json_({ ok: true, saved: saved, data: all, serverTime: Date.now() });\n  } catch (err) {\n    return json_({ ok: false, error: String(err) });\n  } finally {\n    lock.releaseLock();\n  }\n}\n\nfunction writeNeeds_(ss, all) {\n  const sh = ss.getSheetByName(SHEETS.needs);\n  const needs = (all.field && all.field.needs) || [];\n  const dec = (all.director && all.director.decisions) || {};\n  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 13).clearContent();\n  if (!needs.length) return;\n  const rows = needs.map(x => { const d = dec[x.id] || {}; return [x.id || '', x.zone || '', x.type || '', x.desc || '', x.qty || '', x.raised || '', x.due || '', x.status || '提出', d.measure || '', d.budget || '', d.owner || '', d.due || '', d.result || '']; });\n  sh.getRange(2, 1, rows.length, 13).setValues(rows);\n}\n\nfunction writeItems_(ss, f, now) {\n  const sh = ss.getSheetByName(SHEETS.items);\n  const items = f.items || {};\n  const titles = { B1: '急診接收與交接', B2: '三區實際量能', B3: '第二區擴充整備', B4: '第三區預備支援', B5: '各班人力與長期支持', B6: '跨科及外援能力', B7: '設備與供氧能力', B8: '物資與藥品供應', B9: '分區感控與聯合驗收', B10: '醫療服務與後勤銜接', B11: '量能不足與轉院', B12: '資源到位與異常回報' };\n  const rows = Object.keys(titles).map(id => { const v = items[id] || {}; return [id, titles[id], RES[v.r] || '', v.ev || '', v.gap || '', now]; });\n  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 6).clearContent();\n  sh.getRange(2, 1, rows.length, 6).setValues(rows);\n}\n";
+const GAS_CODE = "/**\n * 115年隔離醫院緊急應變檢核表 — Google 試算表後端（含 Google 登入白名單驗證）\n * 使用方式：\n * 1. 將下方 GOOGLE_CLIENT_ID 填入 Google Cloud OAuth 2.0 網頁用戶端 ID。\n * 2. 在試算表中「擴充功能 → Apps Script」，貼上本程式碼並儲存。\n * 3. 執行一次 setup()（會建立「授權名單」工作表並自動加入試算表擁有者 Email）。\n * 4. 在「授權名單」工作表新增允許存取的 Google 帳號（Email、權限：編輯／唯讀、狀態：啟用）。\n * 5. 「部署 → 管理部署作業 → 編輯 → 版本：新版本 → 部署」（執行身分：我；誰可以存取：所有人）。\n */\nconst GOOGLE_CLIENT_ID = '617987658234-tb5q7dqalnbmdji0cu4okdf21isjl53m.apps.googleusercontent.com';\n\nconst SHEETS = {\n  store: '資料儲存',\n  log: '異動紀錄',\n  kpi: 'KPI紀錄',\n  needs: '需求追蹤',\n  items: '查核結果',\n  auth: '授權名單',\n};\nconst PARTS = ['field', 'director', 'static'];\nconst PART_NAME = { field: '現場主管版', director: '院長版', static: '靜態檢核表' };\nconst RES = { full: '完全符合', part: '部分符合', none: '無規劃', na: '不適用' };\n\nfunction setup() {\n  const ss = SpreadsheetApp.getActiveSpreadsheet();\n  const mk = (name, header) => {\n    let sh = ss.getSheetByName(name);\n    if (!sh) sh = ss.insertSheet(name);\n    if (header && sh.getLastRow() === 0) {\n      sh.appendRow(header);\n      sh.getRange(1, 1, 1, header.length).setFontWeight('bold').setBackground('#dcfce7');\n      sh.setFrozenRows(1);\n    }\n    return sh;\n  };\n  const st = mk(SHEETS.store, ['部分', 'JSON 資料（請勿手動修改）', '更新時間']);\n  PARTS.forEach((p, i) => { if (!st.getRange(i + 2, 1).getValue()) st.getRange(i + 2, 1).setValue(p); });\n  mk(SHEETS.log, ['時間', '頁面', '醫院', '填報／簽核人', '摘要']);\n  mk(SHEETS.kpi, ['時間', '醫院', '警示燈號', '湧入分級', '已驗收可用床', '已收治', '可再收', '佔床率', '急診等床(時)', '呼吸器佔用', 'ICU佔用', '預估滿床(天)', '最晚決策(天)', '最先不足資源', 'B1–B12符合度']);\n  mk(SHEETS.needs, ['需求編號', '區域', '類型', '需求內容', '數量', '提出日', '需到位期限', '進度', '院長核定措施', '經費', '執行人', '完成期限', '到位與驗收結果']);\n  mk(SHEETS.items, ['項目', '主題', '結果', '佐證', '缺口／說明', '更新時間']);\n  const au = mk(SHEETS.auth, ['Google Email（小寫）', '姓名／職稱', '權限（編輯／唯讀）', '狀態（啟用／停用）', '備註']);\n  if (au.getLastRow() === 1) {\n    const owner = (Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();\n    if (owner) au.appendRow([owner, '管理員（試算表擁有者）', '編輯', '啟用', 'setup() 自動加入']);\n  }\n  const def = ss.getSheetByName('工作表1') || ss.getSheetByName('Sheet1');\n  if (def && ss.getSheets().length > 1 && def.getLastRow() === 0) ss.deleteSheet(def);\n}\n\nfunction authErr_(code, msg) {\n  const e = new Error(msg);\n  e.code = code;\n  return e;\n}\n\nfunction verifyUser_(token) {\n  if (!GOOGLE_CLIENT_ID) throw authErr_('CONFIG_ERROR', '後端尚未設定 GOOGLE_CLIENT_ID');\n  if (!token) throw authErr_('UNAUTHORIZED', '請先使用 Google 帳號登入');\n\n  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token));\n  const cacheKey = 'gtok_' + Utilities.base64EncodeWebSafe(digest);\n  const cache = CacheService.getScriptCache();\n  let info = null;\n  const cached = cache.get(cacheKey);\n  if (cached) {\n    try { info = JSON.parse(cached); } catch (e) {}\n  }\n  if (!info) {\n    const resp = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(String(token)), { muteHttpExceptions: true });\n    if (resp.getResponseCode() !== 200) throw authErr_('TOKEN_EXPIRED', 'Google 登入憑證無效或已過期，請重新登入');\n    const j = JSON.parse(resp.getContentText());\n    if (j.aud !== GOOGLE_CLIENT_ID) throw authErr_('UNAUTHORIZED', 'Google 登入來源（Client ID）不符');\n    if (j.email_verified !== 'true' && j.email_verified !== true) throw authErr_('UNAUTHORIZED', 'Google 帳號 Email 尚未驗證');\n    const expMs = Number(j.exp || 0) * 1000;\n    if (!expMs || expMs <= Date.now()) throw authErr_('TOKEN_EXPIRED', 'Google 登入已過期，請重新登入');\n    info = { email: String(j.email || '').trim().toLowerCase(), name: String(j.name || ''), expMs: expMs };\n    const ttl = Math.min(300, Math.max(10, Math.floor((expMs - Date.now()) / 1000) - 5));\n    cache.put(cacheKey, JSON.stringify(info), ttl);\n  } else if (info.expMs <= Date.now()) {\n    cache.remove(cacheKey);\n    throw authErr_('TOKEN_EXPIRED', 'Google 登入已過期，請重新登入');\n  }\n\n  const ss = SpreadsheetApp.getActiveSpreadsheet();\n  const sh = ss.getSheetByName(SHEETS.auth);\n  if (!sh) throw authErr_('CONFIG_ERROR', '尚未建立「授權名單」工作表，請執行 setup()');\n  const lastRow = sh.getLastRow();\n  if (lastRow < 2) throw authErr_('FORBIDDEN', '「授權名單」尚無任何帳號，請聯繫管理員加入：' + info.email);\n  const rows = sh.getRange(2, 1, lastRow - 1, 4).getValues();\n  for (let i = 0; i < rows.length; i++) {\n    const em = String(rows[i][0] || '').trim().toLowerCase();\n    const status = String(rows[i][3] || '').trim();\n    if (em && em === info.email) {\n      if (status === '停用') throw authErr_('FORBIDDEN', '此 Google 帳號（' + info.email + '）已被停用，請聯繫管理員');\n      const role = String(rows[i][2] || '').trim() === '唯讀' ? 'viewer' : 'editor';\n      return { email: info.email, name: String(rows[i][1] || info.name || info.email).trim(), role: role };\n    }\n  }\n  throw authErr_('FORBIDDEN', '此 Google 帳號（' + info.email + '）尚未獲得授權，請聯繫管理員加入試算表「授權名單」');\n}\n\nfunction readAll_() {\n  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEETS.store);\n  if (!sh) throw new Error('尚未執行 setup()');\n  const out = {};\n  PARTS.forEach((p, i) => {\n    const v = sh.getRange(i + 2, 2).getValue();\n    if (v) { try { out[p] = JSON.parse(v); } catch (e) {} }\n  });\n  return out;\n}\n\nfunction json_(o) {\n  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    const token = e && e.parameter && e.parameter.token;\n    const user = verifyUser_(token);\n    return json_({ ok: true, user: user, data: readAll_(), serverTime: Date.now() });\n  } catch (err) {\n    return json_({ ok: false, code: err.code || 'ERROR', error: String(err.message || err) });\n  }\n}\n\nfunction doPost(e) {\n  let body, user;\n  try {\n    body = JSON.parse(e.postData.contents);\n    user = verifyUser_(body.token);\n    if (body.action === 'get') {\n      return json_({ ok: true, user: user, data: readAll_(), serverTime: Date.now() });\n    }\n    if (user.role !== 'editor') {\n      throw authErr_('FORBIDDEN', '此帳號（' + user.email + '）僅有「唯讀」權限，無法修改雲端資料');\n    }\n  } catch (err) {\n    return json_({ ok: false, code: err.code || 'ERROR', error: String(err.message || err) });\n  }\n\n  const lock = LockService.getScriptLock();\n  lock.waitLock(20000);\n  try {\n    const ss = SpreadsheetApp.getActiveSpreadsheet();\n    const st = ss.getSheetByName(SHEETS.store);\n    if (!st) throw new Error('尚未執行 setup()');\n    const now = new Date();\n    const saved = [];\n    PARTS.forEach((p, i) => {\n      const part = body.parts && body.parts[p];\n      if (!part) return;\n      const cur = st.getRange(i + 2, 2).getValue();\n      let curTs = 0; try { curTs = cur ? (JSON.parse(cur)._ts || 0) : 0; } catch (x) {}\n      if ((part._ts || 0) < curTs) return; // 雲端較新，不覆蓋\n      const s = JSON.stringify(part);\n      if (s.length > 49000) throw new Error(p + ' 資料過大（超過試算表儲存格上限）');\n      st.getRange(i + 2, 1, 1, 3).setValues([[p, s, now]]);\n      saved.push(p);\n    });\n    const all = readAll_();\n    const f = all.field || {}, meta = f.meta || {};\n    const actor = body.by ? (body.by + ' [' + user.email + ']') : user.email;\n    if (saved.length) {\n      ss.getSheetByName(SHEETS.log).appendRow([now, saved.map(p => PART_NAME[p]).join('、'), meta.hospital || '', actor, body.summary || '']);\n    }\n    if (body.kpi && saved.indexOf('field') > -1) {\n      const k = body.kpi;\n      ss.getSheetByName(SHEETS.kpi).appendRow([now, meta.hospital || ''].concat(['level', 'surge', 'accAll', 'admAll', 'remAll', 'occAll', 'edWait', 'ventOcc', 'icuOcc', 'daysToFull', 'latestDays', 'first', 'comp'].map(x => k[x] == null ? '' : k[x])));\n    }\n    if (saved.indexOf('field') > -1 || saved.indexOf('director') > -1) writeNeeds_(ss, all);\n    if (saved.indexOf('field') > -1) writeItems_(ss, f, now);\n    return json_({ ok: true, user: user, saved: saved, data: all, serverTime: Date.now() });\n  } catch (err) {\n    return json_({ ok: false, code: err.code || 'ERROR', error: String(err.message || err) });\n  } finally {\n    lock.releaseLock();\n  }\n}\n\nfunction writeNeeds_(ss, all) {\n  const sh = ss.getSheetByName(SHEETS.needs);\n  const needs = (all.field && all.field.needs) || [];\n  const dec = (all.director && all.director.decisions) || {};\n  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 13).clearContent();\n  if (!needs.length) return;\n  const rows = needs.map(x => { const d = dec[x.id] || {}; return [x.id || '', x.zone || '', x.type || '', x.desc || '', x.qty || '', x.raised || '', x.due || '', x.status || '提出', d.measure || '', d.budget || '', d.owner || '', d.due || '', d.result || '']; });\n  sh.getRange(2, 1, rows.length, 13).setValues(rows);\n}\n\nfunction writeItems_(ss, f, now) {\n  const sh = ss.getSheetByName(SHEETS.items);\n  const items = f.items || {};\n  const titles = { B1: '急診接收與交接', B2: '三區實際量能', B3: '第二區擴充整備', B4: '第三區預備支援', B5: '各班人力與長期支持', B6: '跨科及外援能力', B7: '設備與供氧能力', B8: '物資與藥品供應', B9: '分區感控與聯合驗收', B10: '醫療服務與後勤銜接', B11: '量能不足與轉院', B12: '資源到位與異常回報' };\n  const rows = Object.keys(titles).map(id => { const v = items[id] || {}; return [id, titles[id], RES[v.r] || '', v.ev || '', v.gap || '', now]; });\n  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 6).clearContent();\n  sh.getRange(2, 1, rows.length, 6).setValues(rows);\n}\n";
+const Auth = {
+  TKEY:'icp115_google_token', token:'', user:null, verified:false, gisReady:false,
+  parseJwt(t){try{const b=t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');const j=decodeURIComponent(atob(b).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));return JSON.parse(j)}catch(e){return null}},
+  savedToken(){try{const t=localStorage.getItem(Auth.TKEY)||'';if(!t)return '';const p=Auth.parseJwt(t);if(!p||!p.exp||p.exp*1000<=Date.now()+30000){localStorage.removeItem(Auth.TKEY);return ''}return t}catch(e){return ''}},
+  setToken(t){Auth.token=t||'';try{t?localStorage.setItem(Auth.TKEY,t):localStorage.removeItem(Auth.TKEY)}catch(e){}},
+  isViewer(){return !!(Auth.user&&Auth.user.role==='viewer')},
+  clearLocal(){try{localStorage.removeItem(STORE_KEY);localStorage.removeItem(Cloud.DKEY)}catch(e){} if(window.onExternalUpdate)window.onExternalUpdate()},
+  updateChip(){
+    const el=document.getElementById('authSt'); if(!el)return;
+    if(Auth.user){
+      const ro=Auth.user.role==='viewer';
+      el.innerHTML=`<span class="auth-user">${esc(Auth.user.email.split('@')[0])}<span class="auth-role${ro?' ro':''}">${ro?'唯讀':'已驗證'}</span></span>`;
+      el.parentElement.title=Auth.user.email+(ro?'（唯讀權限）':'（編輯權限）')+' — 點擊檢視或登出';
+    }else{
+      el.textContent='Google 登入';
+      el.parentElement.title='點擊使用 Google 帳號登入';
+    }
+    const ro=Auth.isViewer();
+    ['bDemo','bClr'].forEach(id=>{const b=document.getElementById(id);if(b)b.disabled=ro});
+  },
+  showGate(msg,isErr){
+    document.body.classList.add('locked');
+    let g=document.getElementById('authGate');
+    if(!g){
+      g=document.createElement('div'); g.id='authGate'; g.className='auth-gate';
+      g.innerHTML=`<div class="auth-card"><div class="dot">檢</div><h2>115年隔離醫院緊急應變檢核</h2><p>本系統採 Google 帳號授權存取，請使用已加入試算表「授權名單」的 Google 帳號登入。</p><div class="auth-btn-wrap" id="gsiBtnWrap"></div><div class="auth-msg" id="authGateMsg"></div></div>`;
+      document.body.appendChild(g);
+    }
+    const m=document.getElementById('authGateMsg');
+    if(m){m.textContent=msg||'';m.className='auth-msg'+(isErr?' err':'')}
+    Auth.renderGsiButton();
+  },
+  hideGate(){document.body.classList.remove('locked');const g=document.getElementById('authGate');if(g)g.remove()},
+  renderGsiButton(){
+    const wrap=document.getElementById('gsiBtnWrap'); if(!wrap)return;
+    if(!GOOGLE_CLIENT_ID){
+      wrap.innerHTML='<div class="mini" style="color:var(--yel);background:var(--yel-bg);padding:10px 12px;border-radius:8px;text-align:left">尚未設定 <code>GOOGLE_CLIENT_ID</code>，請先完成 Google Cloud OAuth 用戶端設定並填入程式碼。</div>';
+      return;
+    }
+    const tryRender=tries=>{
+      if(window.google&&google.accounts&&google.accounts.id){
+        if(!Auth.gisReady){
+          google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:resp=>Auth.onCredential(resp&&resp.credential),auto_select:false});
+          Auth.gisReady=true;
+        }
+        wrap.innerHTML='';
+        google.accounts.id.renderButton(wrap,{theme:'outline',size:'large',text:'signin_with',shape:'pill',width:280,locale:'zh_TW'});
+      }else if(tries>0){setTimeout(()=>tryRender(tries-1),200)}
+      else{wrap.innerHTML='<div class="mini" style="color:var(--red)">無法載入 Google 登入元件，請確認網路連線後重新整理頁面。</div>'}
+    };
+    tryRender(30);
+  },
+  async onCredential(credential){
+    if(!credential)return;
+    Auth.setToken(credential);
+    Auth.showGate('驗證 Google 帳號與授權名單中…',false);
+    try{
+      const j=await Cloud.req('GET');
+      Auth.user=j.user||null; Auth.verified=true; Auth.updateChip(); Auth.hideGate();
+      Cloud.last=new Date(); Cloud.status(Cloud.dirty().length&&!Auth.isViewer()?'pending':'ok','');
+      if(j.data)Cloud.apply(j.data);
+      Cloud.startPoll();
+      toast('已登入：'+(Auth.user?Auth.user.email:''));
+    }catch(err){
+      const code=err.code||'';
+      if(code==='FORBIDDEN'||code==='UNAUTHORIZED'||code==='TOKEN_EXPIRED'){
+        Auth.setToken(''); Auth.user=null; Auth.verified=false; Auth.updateChip();
+        if(code==='FORBIDDEN')Auth.clearLocal();
+        Auth.showGate(err.message||'此帳號未獲授權',true);
+      }else{
+        Auth.showGate('連線驗證失敗：'+(err.message||err),true);
+      }
+    }
+  },
+  logout(fromOtherTab){
+    Auth.setToken(''); Auth.user=null; Auth.verified=false; clearInterval(Cloud.poll);
+    if(!fromOtherTab)Auth.clearLocal();
+    else if(window.onExternalUpdate)window.onExternalUpdate();
+    try{if(window.google&&google.accounts&&google.accounts.id)google.accounts.id.disableAutoSelect()}catch(e){}
+    Auth.updateChip();
+    Auth.showGate(fromOtherTab?'已在其他分頁登出，請重新登入。':'已登出。請重新使用授權的 Google 帳號登入。',false);
+  },
+  dialog(){
+    if(!Auth.user){Auth.showGate('',false);return}
+    const ro=Auth.isViewer();
+    const w=modal(`<h3 style="margin:0 0 8px;color:var(--g900)">Google 帳號資訊</h3>
+      <p class="mini" style="margin:0 0 6px">登入帳號：<b>${esc(Auth.user.email)}</b></p>
+      <p class="mini" style="margin:0 0 12px">存取權限：<b>${ro?'唯讀（僅可檢視，不可上傳變更）':'編輯（可讀取與同步修改）'}</b></p>
+      <p class="mini" style="margin:0 0 14px">登出時會同步清除此瀏覽器快取的檢核表資料，保護公用電腦資料安全。</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-x>關閉</button><button class="btn danger" data-lo>登出</button></div>`);
+    w.onclick=e=>{if(e.target===w||e.target.matches('[data-x]'))w.remove();else if(e.target.matches('[data-lo]')){w.remove();Auth.logout(false)}};
+  },
+  async boot(){
+    Auth.updateChip();
+    const t=Auth.savedToken();
+    if(!t){Auth.clearLocal();Auth.showGate('',false);return}
+    Auth.token=t;
+    Auth.showGate('正在驗證登入狀態…',false);
+    try{
+      const j=await Cloud.req('GET');
+      Auth.user=j.user||null; Auth.verified=true; Auth.updateChip(); Auth.hideGate();
+      Cloud.last=new Date(); Cloud.status(Cloud.dirty().length&&!Auth.isViewer()?'pending':'ok','');
+      if(j.data)Cloud.apply(j.data);
+      Cloud.startPoll();
+    }catch(err){
+      const code=err.code||'';
+      if(code==='FORBIDDEN'||code==='UNAUTHORIZED'||code==='TOKEN_EXPIRED'){
+        Auth.setToken(''); Auth.user=null; Auth.verified=false; Auth.updateChip();
+        Auth.clearLocal();
+        Auth.showGate(err.message||'登入已失效，請重新登入',true);
+      }else{
+        Auth.showGate('無法連線至後端驗證：'+(err.message||err),true);
+      }
+    }
+  }
+};
 const Cloud = {
-  KEY:'icp115_gas_url', DKEY:'icp115_dirty', timer:null, poll:null, busy:false, state:'off', last:null, err:'',
+  KEY:'icp115_gas_url', DKEY:'icp115_dirty', timer:null, poll:null, busy:false, state:'off', last:null, err:'', _bound:false,
   url(){try{return localStorage.getItem(Cloud.KEY)||GAS_DEFAULT_URL}catch(e){return GAS_DEFAULT_URL}},
   setUrl(u){try{u?localStorage.setItem(Cloud.KEY,u):localStorage.removeItem(Cloud.KEY)}catch(e){}},
   dirty(){try{return JSON.parse(localStorage.getItem(Cloud.DKEY)||'[]')}catch(e){return []}},
   setDirty(a){try{localStorage.setItem(Cloud.DKEY,JSON.stringify([...new Set(a)]))}catch(e){}},
-  markDirty(parts){if(!parts||!parts.length)return;Cloud.setDirty(Cloud.dirty().concat(parts));Cloud.schedule()},
-  schedule(){if(!Cloud.url())return;clearTimeout(Cloud.timer);Cloud.status('pending');Cloud.timer=setTimeout(()=>Cloud.push(),1500)},
+  markDirty(parts){if(!parts||!parts.length)return;if(Auth.isViewer()){toast('此帳號為唯讀權限，變更不會上傳雲端');return}Cloud.setDirty(Cloud.dirty().concat(parts));Cloud.schedule()},
+  schedule(){if(!Cloud.url()||!Auth.verified||Auth.isViewer())return;clearTimeout(Cloud.timer);Cloud.status('pending');Cloud.timer=setTimeout(()=>Cloud.push(),1500)},
   status(st,msg){Cloud.state=st;if(msg!=null)Cloud.err=msg;const el=document.getElementById('cloudSt');if(!el)return;
     const map={off:'☁ 雲端：未設定',pending:'☁ 待上傳…',sync:'☁ 同步中…',ok:'☁ 已同步 '+(Cloud.last?fmtDT(Cloud.last).split(' ')[1]:''),err:'☁ 同步失敗'};
     el.textContent=map[st]||st; el.parentElement.style.color=st==='err'?'var(--red)':st==='ok'?'var(--g700)':''; el.parentElement.title=st==='err'?Cloud.err:'雲端同步設定'},
@@ -411,11 +545,26 @@ const Cloud = {
   },
   async req(method,body){
     const u=Cloud.url(); if(!u) throw new Error('未設定網址');
-    const r=await fetch(u,method==='GET'?{method:'GET'}:{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
-    const j=await r.json(); if(!j.ok) throw new Error(j.error||'伺服器錯誤'); return j;
+    const token=Auth.token||Auth.savedToken();
+    if(!token){const e=new Error('請先使用 Google 帳號登入');e.code='UNAUTHORIZED';throw e}
+    const payload=method==='GET'?{action:'get',token}:Object.assign({action:'post',token},body||{});
+    const r=await fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
+    const j=await r.json();
+    if(!j.ok){
+      const e=new Error(j.error||'伺服器錯誤'); e.code=j.code||'ERROR';
+      if(Auth.verified&&(e.code==='TOKEN_EXPIRED'||e.code==='UNAUTHORIZED'||e.code==='FORBIDDEN')){
+        Auth.setToken(''); Auth.user=null; Auth.verified=false; Auth.updateChip(); clearInterval(Cloud.poll);
+        if(e.code==='FORBIDDEN')Auth.clearLocal();
+        Auth.showGate(e.message,true);
+      }
+      throw e;
+    }
+    return j;
   },
   async push(force){
-    if(!Cloud.url()) return; const d=Cloud.dirty(); if(!d.length&&!force) return;
+    if(!Cloud.url()||!Auth.verified) return;
+    if(Auth.isViewer()){Cloud.setDirty([]);Cloud.status('ok','');toast('此帳號為唯讀權限，變更不會上傳雲端');return}
+    const d=Cloud.dirty(); if(!d.length&&!force) return;
     if(Cloud.busy){Cloud.schedule();return} Cloud.busy=true; Cloud.status('sync');
     try{
       const db=Store.load(), parts={}; d.forEach(p=>{if(db[p])parts[p]=db[p]});
@@ -430,11 +579,11 @@ const Cloud = {
       Cloud.last=new Date(); Cloud.status('ok','');
       Cloud.apply(j.data);
     }catch(e){Cloud.status('err',String(e.message||e))}
-    finally{Cloud.busy=false; if(Cloud.dirty().length&&Cloud.state!=='err') Cloud.schedule()}
+    finally{Cloud.busy=false; if(Cloud.dirty().length&&Cloud.state!=='err'&&Auth.verified&&!Auth.isViewer()) Cloud.schedule()}
   },
   async pull(){
-    if(!Cloud.url()||Cloud.busy) return; Cloud.busy=true; if(Cloud.state!=='pending')Cloud.status('sync');
-    try{const j=await Cloud.req('GET');Cloud.last=new Date();Cloud.status(Cloud.dirty().length?'pending':'ok','');Cloud.apply(j.data)}
+    if(!Cloud.url()||!Auth.verified||Cloud.busy) return; Cloud.busy=true; if(Cloud.state!=='pending')Cloud.status('sync');
+    try{const j=await Cloud.req('GET');if(j.user){Auth.user=j.user;Auth.updateChip()}Cloud.last=new Date();Cloud.status(Cloud.dirty().length&&!Auth.isViewer()?'pending':'ok','');Cloud.apply(j.data)}
     catch(e){Cloud.status('err',String(e.message||e))}
     finally{Cloud.busy=false}
   },
@@ -447,33 +596,34 @@ const Cloud = {
     if(typing||Store._t){Cloud.pendingApply=true;return}
     Cloud.pendingApply=false; if(window.onExternalUpdate) window.onExternalUpdate(); toast('已載入雲端最新資料');
   },
+  startPoll(){
+    if(Cloud.dirty().length&&!Auth.isViewer()) Cloud.push();
+    clearInterval(Cloud.poll); Cloud.poll=setInterval(()=>{if(document.hidden||!Auth.verified)return; (Cloud.dirty().length&&!Auth.isViewer())?Cloud.push():Cloud.pull()},30000);
+    if(!Cloud._bound){
+      Cloud._bound=true;
+      window.addEventListener('focus',()=>{if(Auth.verified)Cloud.pull()});
+      document.addEventListener('focusout',()=>setTimeout(()=>{if(Cloud.pendingApply){const ae=document.activeElement;if(!(ae&&ae.matches&&ae.matches('main input,main textarea,main select'))){Cloud.pendingApply=false;window.onExternalUpdate&&window.onExternalUpdate();toast('已載入雲端最新資料')}}},300));
+    }
+  },
   start(){
     if(!Cloud.url()){Cloud.status('off');return}
-    Cloud.status('sync');
-    (Cloud.dirty().length?Cloud.push():Cloud.pull());
-    clearInterval(Cloud.poll); Cloud.poll=setInterval(()=>{if(document.hidden)return; Cloud.dirty().length?Cloud.push():Cloud.pull()},30000);
-    window.addEventListener('focus',()=>Cloud.pull());
-    document.addEventListener('focusout',()=>setTimeout(()=>{if(Cloud.pendingApply){const ae=document.activeElement;if(!(ae&&ae.matches&&ae.matches('main input,main textarea,main select'))){Cloud.pendingApply=false;window.onExternalUpdate&&window.onExternalUpdate();toast('已載入雲端最新資料')}}},300));
+    Auth.boot();
   },
 };
 function cloudDialog(){
   const u=Cloud.url();
   const w=modal(`<h3 style="margin:0 0 6px;color:var(--g900)">雲端同步（Google 試算表）</h3>
-   <p class="mini" style="margin:0 0 10px">設定後三個頁面自動同步：填寫後約 2 秒上傳；開啟頁面時載入最新資料，之後每 30 秒更新。所有使用同一個網址的電腦都看到同一份資料。</p>
+   <p class="mini" style="margin:0 0 10px">設定後三個頁面自動同步：填寫後約 2 秒上傳；開啟頁面時載入最新資料，之後每 30 秒更新。後端已啟用 Google 帳號白名單驗證（試算表「授權名單」工作表）。</p>
    <label class="f">Apps Script 網頁應用程式網址<input type="text" id="gu" placeholder="https://script.google.com/macros/s/……/exec" value="${esc(u)}"></label>
    <div class="mini" id="gmsg" style="margin-top:6px;min-height:18px">${Cloud.state==='err'?'<span style="color:var(--red)">上次同步失敗：'+esc(Cloud.err)+'</span>':Cloud.last?'上次同步：'+fmtDT(Cloud.last):''}</div>
    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn" data-t>測試連線</button>${u?'<button class="btn danger" data-off>停用同步</button>':''}<span style="flex:1"></span><button class="btn" data-x>關閉</button><button class="btn pri" data-sv>儲存並連線</button></div>
-   <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:600;color:var(--g800)">第一次設定步驟（約 5 分鐘）</summary>
+   <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:600;color:var(--g800)">設定與授權名單管理說明</summary>
    <ol class="mini" style="padding-left:18px;line-height:1.8">
-   <li>到 Google 雲端硬碟建立一個新的 Google 試算表（名稱自訂，例如「隔離醫院應變檢核 Demo」）。</li>
-   <li>試算表上方選單「擴充功能 → Apps Script」，刪除預設內容，貼上下方程式碼，按儲存。</li>
-   <li>上方函式選單選 <b>setup</b> → 按「執行」，依提示授權（第一次會出現「Google 尚未驗證這個應用程式」，點「進階 → 前往（不安全）」，這是您自己的程式）。</li>
-   <li>右上「部署 → 新增部署作業」→ 類型選「網頁應用程式」；執行身分：<b>我</b>；誰可以存取：<b>所有人</b> → 部署。</li>
-   <li>複製「網頁應用程式網址」（結尾是 /exec），貼到上方欄位，按「儲存並連線」。</li>
-   <li>之後修改程式碼要重新部署：「部署 → 管理部署作業 → 編輯 → 版本：新版本」，網址不變。</li></ol>
+   <li>在試算表「授權名單」工作表新增或移除允許存取的 Google 帳號 Email（權限可填 <b>編輯</b> 或 <b>唯讀</b>；狀態改為 <b>停用</b> 可立即停權）。</li>
+   <li>修改 Apps Script 程式碼後重新部署：「部署 → 管理部署作業 → 編輯 → 版本：新版本」，網址不變。</li></ol>
    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><b class="mini">Apps Script 程式碼</b><button class="btn sm" data-cpc>複製程式碼</button></div>
    <textarea id="gcode" rows="8" readonly style="font-family:ui-monospace,monospace;font-size:11.5px">${esc(GAS_CODE)}</textarea>
-   <p class="mini">注意：「所有人」代表知道網址的人都能讀寫資料，僅適合 Demo，請勿填入真實病人個資。</p></details>`);
+   </details>`);
   const msg=t=>$('#gmsg',w).innerHTML=t;
   w.onclick=async e=>{const t=e.target;
     if(t===w||t.matches('[data-x]')) w.remove();
@@ -483,16 +633,17 @@ function cloudDialog(){
       const v=$('#gu',w).value.trim(); if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(v)){msg('<span style="color:var(--red)">網址格式不符，應為 https://script.google.com/macros/s/…/exec</span>');return}
       msg('連線中…'); const old=Cloud.url(); Cloud.setUrl(v);
       try{const j=await Cloud.req('GET'); const has=ALL_PARTS.filter(p=>j.data&&j.data[p]);
-        if(t.matches('[data-t]')){Cloud.setUrl(old);msg(`<span style="color:var(--g700)">✓ 連線成功。</span>雲端目前${has.length?'有資料（'+has.map(p=>({field:'現場',director:'院長',static:'靜態'})[p]).join('、')+'）':'沒有資料'}。`);return}
+        if(t.matches('[data-t]')){Cloud.setUrl(old);msg(`<span style="color:var(--g700)">✓ 連線成功（${esc(j.user?j.user.email:'')}）。</span>雲端目前${has.length?'有資料（'+has.map(p=>({field:'現場',director:'院長',static:'靜態'})[p]).join('、')+'）':'沒有資料'}。`);return}
         w.remove();
         if(has.length){ if(await ask('雲端已有資料。要以雲端資料取代這台電腦的內容嗎？（選「取消」則改以本機資料上傳覆蓋雲端）','使用雲端資料')){const db=Store.load();has.forEach(p=>db[p]=j.data[p]);Cloud.setDirty([]);Store.raw(db);location.reload();return}
           const db=Store.load();Store.write(db,ALL_PARTS);}
         else {const db=Store.load();Store.write(db,ALL_PARTS);}
         await Cloud.push(true); Cloud.start(); toast('已連線雲端同步');
-      }catch(err){Cloud.setUrl(old);msg('<span style="color:var(--red)">連線失敗：'+esc(err.message||err)+'。請確認已部署為「網頁應用程式」且存取權為「所有人」。若在 claude.ai 預覽中開啟，外部連線會被擋，請改用 GitHub Pages 或本機開啟。</span>')}
+      }catch(err){Cloud.setUrl(old);msg('<span style="color:var(--red)">連線失敗：'+esc(err.message||err)+'</span>')}
     }};
 }
 </script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head><body>
 <script>/* 原檢核表修訂版：條文資料（依附錄頁碼整理） */
 const CLAUSES = [

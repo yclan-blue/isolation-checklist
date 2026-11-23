@@ -1,15 +1,21 @@
 /**
- * 115年隔離醫院緊急應變檢核表 — Google 試算表後端（Demo 用）
- * 使用方式：在試算表中「擴充功能 → Apps Script」，貼上本程式碼，
- * 執行一次 setup()，再「部署 → 新增部署作業 → 網頁應用程式」
- * （執行身分：我；存取權：所有人），複製網址貼到檢核表的「雲端同步設定」。
+ * 115年隔離醫院緊急應變檢核表 — Google 試算表後端（含 Google 登入白名單驗證）
+ * 使用方式：
+ * 1. 將下方 GOOGLE_CLIENT_ID 填入 Google Cloud OAuth 2.0 網頁用戶端 ID。
+ * 2. 在試算表中「擴充功能 → Apps Script」，貼上本程式碼並儲存。
+ * 3. 執行一次 setup()（會建立「授權名單」工作表並自動加入試算表擁有者 Email）。
+ * 4. 在「授權名單」工作表新增允許存取的 Google 帳號（Email、權限：編輯／唯讀、狀態：啟用）。
+ * 5. 「部署 → 管理部署作業 → 編輯 → 版本：新版本 → 部署」（執行身分：我；誰可以存取：所有人）。
  */
+const GOOGLE_CLIENT_ID = '617987658234-tb5q7dqalnbmdji0cu4okdf21isjl53m.apps.googleusercontent.com';
+
 const SHEETS = {
   store: '資料儲存',
   log: '異動紀錄',
   kpi: 'KPI紀錄',
   needs: '需求追蹤',
   items: '查核結果',
+  auth: '授權名單',
 };
 const PARTS = ['field', 'director', 'static'];
 const PART_NAME = { field: '現場主管版', director: '院長版', static: '靜態檢核表' };
@@ -33,8 +39,65 @@ function setup() {
   mk(SHEETS.kpi, ['時間', '醫院', '警示燈號', '湧入分級', '已驗收可用床', '已收治', '可再收', '佔床率', '急診等床(時)', '呼吸器佔用', 'ICU佔用', '預估滿床(天)', '最晚決策(天)', '最先不足資源', 'B1–B12符合度']);
   mk(SHEETS.needs, ['需求編號', '區域', '類型', '需求內容', '數量', '提出日', '需到位期限', '進度', '院長核定措施', '經費', '執行人', '完成期限', '到位與驗收結果']);
   mk(SHEETS.items, ['項目', '主題', '結果', '佐證', '缺口／說明', '更新時間']);
+  const au = mk(SHEETS.auth, ['Google Email（小寫）', '姓名／職稱', '權限（編輯／唯讀）', '狀態（啟用／停用）', '備註']);
+  if (au.getLastRow() === 1) {
+    const owner = (Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
+    if (owner) au.appendRow([owner, '管理員（試算表擁有者）', '編輯', '啟用', 'setup() 自動加入']);
+  }
   const def = ss.getSheetByName('工作表1') || ss.getSheetByName('Sheet1');
   if (def && ss.getSheets().length > 1 && def.getLastRow() === 0) ss.deleteSheet(def);
+}
+
+function authErr_(code, msg) {
+  const e = new Error(msg);
+  e.code = code;
+  return e;
+}
+
+function verifyUser_(token) {
+  if (!GOOGLE_CLIENT_ID) throw authErr_('CONFIG_ERROR', '後端尚未設定 GOOGLE_CLIENT_ID');
+  if (!token) throw authErr_('UNAUTHORIZED', '請先使用 Google 帳號登入');
+
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token));
+  const cacheKey = 'gtok_' + Utilities.base64EncodeWebSafe(digest);
+  const cache = CacheService.getScriptCache();
+  let info = null;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try { info = JSON.parse(cached); } catch (e) {}
+  }
+  if (!info) {
+    const resp = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(String(token)), { muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) throw authErr_('TOKEN_EXPIRED', 'Google 登入憑證無效或已過期，請重新登入');
+    const j = JSON.parse(resp.getContentText());
+    if (j.aud !== GOOGLE_CLIENT_ID) throw authErr_('UNAUTHORIZED', 'Google 登入來源（Client ID）不符');
+    if (j.email_verified !== 'true' && j.email_verified !== true) throw authErr_('UNAUTHORIZED', 'Google 帳號 Email 尚未驗證');
+    const expMs = Number(j.exp || 0) * 1000;
+    if (!expMs || expMs <= Date.now()) throw authErr_('TOKEN_EXPIRED', 'Google 登入已過期，請重新登入');
+    info = { email: String(j.email || '').trim().toLowerCase(), name: String(j.name || ''), expMs: expMs };
+    const ttl = Math.min(300, Math.max(10, Math.floor((expMs - Date.now()) / 1000) - 5));
+    cache.put(cacheKey, JSON.stringify(info), ttl);
+  } else if (info.expMs <= Date.now()) {
+    cache.remove(cacheKey);
+    throw authErr_('TOKEN_EXPIRED', 'Google 登入已過期，請重新登入');
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName(SHEETS.auth);
+  if (!sh) throw authErr_('CONFIG_ERROR', '尚未建立「授權名單」工作表，請執行 setup()');
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) throw authErr_('FORBIDDEN', '「授權名單」尚無任何帳號，請聯繫管理員加入：' + info.email);
+  const rows = sh.getRange(2, 1, lastRow - 1, 4).getValues();
+  for (let i = 0; i < rows.length; i++) {
+    const em = String(rows[i][0] || '').trim().toLowerCase();
+    const status = String(rows[i][3] || '').trim();
+    if (em && em === info.email) {
+      if (status === '停用') throw authErr_('FORBIDDEN', '此 Google 帳號（' + info.email + '）已被停用，請聯繫管理員');
+      const role = String(rows[i][2] || '').trim() === '唯讀' ? 'viewer' : 'editor';
+      return { email: info.email, name: String(rows[i][1] || info.name || info.email).trim(), role: role };
+    }
+  }
+  throw authErr_('FORBIDDEN', '此 Google 帳號（' + info.email + '）尚未獲得授權，請聯繫管理員加入試算表「授權名單」');
 }
 
 function readAll_() {
@@ -52,16 +115,34 @@ function json_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function doGet() {
-  try { return json_({ ok: true, data: readAll_(), serverTime: Date.now() }); }
-  catch (e) { return json_({ ok: false, error: String(e) }); }
+function doGet(e) {
+  try {
+    const token = e && e.parameter && e.parameter.token;
+    const user = verifyUser_(token);
+    return json_({ ok: true, user: user, data: readAll_(), serverTime: Date.now() });
+  } catch (err) {
+    return json_({ ok: false, code: err.code || 'ERROR', error: String(err.message || err) });
+  }
 }
 
 function doPost(e) {
+  let body, user;
+  try {
+    body = JSON.parse(e.postData.contents);
+    user = verifyUser_(body.token);
+    if (body.action === 'get') {
+      return json_({ ok: true, user: user, data: readAll_(), serverTime: Date.now() });
+    }
+    if (user.role !== 'editor') {
+      throw authErr_('FORBIDDEN', '此帳號（' + user.email + '）僅有「唯讀」權限，無法修改雲端資料');
+    }
+  } catch (err) {
+    return json_({ ok: false, code: err.code || 'ERROR', error: String(err.message || err) });
+  }
+
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    const body = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const st = ss.getSheetByName(SHEETS.store);
     if (!st) throw new Error('尚未執行 setup()');
@@ -80,8 +161,9 @@ function doPost(e) {
     });
     const all = readAll_();
     const f = all.field || {}, meta = f.meta || {};
+    const actor = body.by ? (body.by + ' [' + user.email + ']') : user.email;
     if (saved.length) {
-      ss.getSheetByName(SHEETS.log).appendRow([now, saved.map(p => PART_NAME[p]).join('、'), meta.hospital || '', body.by || '', body.summary || '']);
+      ss.getSheetByName(SHEETS.log).appendRow([now, saved.map(p => PART_NAME[p]).join('、'), meta.hospital || '', actor, body.summary || '']);
     }
     if (body.kpi && saved.indexOf('field') > -1) {
       const k = body.kpi;
@@ -89,9 +171,9 @@ function doPost(e) {
     }
     if (saved.indexOf('field') > -1 || saved.indexOf('director') > -1) writeNeeds_(ss, all);
     if (saved.indexOf('field') > -1) writeItems_(ss, f, now);
-    return json_({ ok: true, saved: saved, data: all, serverTime: Date.now() });
+    return json_({ ok: true, user: user, saved: saved, data: all, serverTime: Date.now() });
   } catch (err) {
-    return json_({ ok: false, error: String(err) });
+    return json_({ ok: false, code: err.code || 'ERROR', error: String(err.message || err) });
   } finally {
     lock.releaseLock();
   }
